@@ -123,3 +123,35 @@ Template buttons independently toggle instructions such as Cinematic, Photoreal,
 ### Additional checks
 
 Imported-workflow mappings, invalid imports/mappings, template on/off behavior, encrypted gallery save/read and wrong-PIN rejection are covered by `npm test`, alongside the existing workflow and API mock checks. A live Netlify/RunPod generation test still requires your deployed site and running pod.
+
+## Version 3 — visible projects, Hidden items and timing
+
+After deploying this release, the header and Gallery display **VERSION 3 · PROJECTS + HIDDEN**. If you do not see this label, your browser is showing an older deployment. Confirm Netlify deployed the latest GitHub commit, then reload the page. Do not clear site data to fix a deployment: that would remove browser-local records.
+
+Upload ALL extracted files to the repository root, including new `.tsx`/`.ts` modules in `src/` and both `netlify/edge-functions` handlers. Keep build command `npm run build` and publish directory `dist`.
+
+### Project gallery
+
+Gallery opens on a project-card overview. **New project** creates a separate project for a story or set of generations. Open a card to see its items and use **Generate in project** to save new results directly there. The Create screen also has **Save to project**. Existing version-2 folders automatically appear as projects without losing their IDs or assignments. Project cards use only non-hidden creations as covers/counts.
+
+### Clearly visible gallery lock
+
+The prominent **Lock gallery** button is always available while the gallery is unlocked. Without a PIN it opens setup; **Save PIN & lock gallery** both configures the PIN and locks immediately. With a PIN already configured, **Lock gallery** locks immediately. **PIN settings** remains available while unlocked to change/remove it. The same encrypted records are compatible with the previous release.
+
+### Hidden items
+
+Use the eye-slash button on any completed gallery tile, or **Hide** in its preview. Hidden items are removed from All creations, normal search, project grids/covers/counts and the Create screen's current preview. They retain their original project assignment.
+
+Open **Gallery → Hidden items** to view them. Open an item to **Reuse**, **Download**, **Delete** or **Unhide**; image items also have **Use in video**. Unhiding returns the item to its project. Delete requires confirmation and removes only the gallery record, not the original file on RunPod. Active jobs cannot be hidden or deleted until finished.
+
+Hidden is an organizational flag, not encryption by itself. Set the gallery PIN to encrypt local gallery records. Projects, Hidden items, PIN and timing history are local to this browser; original media remains on RunPod.
+
+### Duration-specific estimated timing bar
+
+Generation timing shows elapsed submission-to-completion time and an estimated progress bar based on the last matching completed run. It displays **Last run**, **Average**, and **Longest recorded**. Expand **Timing by video length** to see independent rows for 4, 5, 6, 8 and 10 seconds. Four-, six-, eight- and ten-second runs never share a duration bucket.
+
+A timing bucket also matches the workflow, resolution preset, frame/aspect, Turbo setting, reference-image use and GPU device (or connection when device details are unavailable). Imported workflows without a seconds mapping use a separate workflow-default duration bucket. Only successful completed runs from this release with measured timestamps contribute; old records without timings are left intact and are not assigned invented durations.
+
+On the first matching generation the bar is indeterminate. Later runs estimate progress from the last matched time, with a cap of 95% until ComfyUI reports completion. At completion the bar reaches 100%. A slower-than-history run stays active and explicitly says it is taking longer.
+
+This is a time estimate, not actual sampler/GPU progress. Times include queue and model loading and are observed at status polling intervals, so completion measurement can lag by about one polling interval. Longest recorded is historical, not a promise or time limit. Hiding an item does not erase its timing; deleting its local record removes that sample from history. Locking pauses browser status polling; after unlocking the job is checked again, so timing can include that locked interval.
