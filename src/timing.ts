@@ -1,0 +1,5 @@
+import type {Job} from './vault';
+export function timingBucket(j:Job){return[j.workflowId||j.mode||'video',j.mode==='image'?'image':j.durationMapped===false?'default':j.duration,j.quality,j.aspect,j.turbo?'turbo':'normal',j.referenceUsed?'reference':'text',j.device||j.base].join('|');}
+export function timingStats(jobs:Job[],candidate:Job){const matches=jobs.filter(j=>j.id!==candidate.id&&j.state==='complete'&&typeof j.elapsedSeconds==='number'&&j.elapsedSeconds>0&&timingBucket(j)===timingBucket(candidate)).sort((a,b)=>(b.completedAt||b.created)-(a.completedAt||a.created));if(!matches.length)return null;const times=matches.map(j=>j.elapsedSeconds!);return{count:times.length,last:times[0],average:times.reduce((a,b)=>a+b,0)/times.length,max:Math.max(...times)};}
+export function timeLabel(seconds:number){const n=Math.max(0,Math.round(seconds));return n<60?n+'s':Math.floor(n/60)+'m '+String(n%60).padStart(2,'0')+'s';}
+export function estimatedPercent(elapsed:number,last:number,complete=false){return complete?100:Math.max(0,Math.min(95,Math.round(elapsed/Math.max(1,last)*100)));}

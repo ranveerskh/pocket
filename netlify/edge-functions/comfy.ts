@@ -11,15 +11,16 @@ export default async function comfy(req: Request) {
     const p: any = await req.json(); const base = runpodURL(String(p.base || ''));
     if (p.action === 'connect') {
       const stats = await jsonUp(base,'/system_stats');
-      const types = [...new Set(Object.values(makeWorkflow({prompt:'Connection check',duration:5,seed:1,quality:'draft',aspect:'landscape',mode:p.mode})).map((n: any)=>n.class_type))];
+      const types = [...new Set(Object.values(makeWorkflow({prompt:'Connection check',duration:5,seed:1,quality:'draft',aspect:'landscape',mode:p.mode,custom:p.custom})).map((n: any)=>n.class_type))];
+      if(types.length>100) throw new Error('This connection check supports up to 100 different node types.');
       const checked = await Promise.all(types.map(async type => { const info = await jsonUp(base,'/object_info/'+encodeURIComponent(type)); return {type,info:info[type]}; }));
       const missing = checked.filter(x=>!x.info).map(x=>x.type);
       if (missing.length) throw new Error('This pod is missing workflow nodes: '+missing.join(', ')+'. Open the selected workflow in ComfyUI and install its requirements.');
-      const graph = makeWorkflow({prompt:'Connection check',duration:5,seed:1,quality:'draft',aspect:'landscape',mode:p.mode});
+      const graph = makeWorkflow({prompt:'Connection check',duration:5,seed:1,quality:'draft',aspect:'landscape',mode:p.mode,custom:p.custom});
       const needed = Object.values(graph).flatMap((node:any) => ['UNETLoader','CLIPLoader','VAELoader'].includes(node.class_type) ? Object.entries(node.inputs).filter(([key])=>['unet_name','clip_name','vae_name'].includes(key)).map(([key,name])=>[node.class_type,key,name]) : []);
       const missingModels = needed.filter(([type,key,name]) => { const info = checked.find(x=>x.type===type)?.info; const options = info?.input?.required?.[key]?.[0]; return Array.isArray(options) && !options.includes(name); }).map(x=>x[2]);
       if(missingModels.length) throw new Error('Missing model files: '+missingModels.join(', '));
-      const loraInfo = p.mode === 'image' ? {} : await jsonUp(base,'/object_info/LoraLoaderModelOnly');
+      const loraInfo = p.custom || p.mode === 'image' ? {} : await jsonUp(base,'/object_info/LoraLoaderModelOnly');
       const lora = loraInfo.LoraLoaderModelOnly?.input?.required?.lora_name?.[0] || [];
       return Response.json({connected:true,device:stats.devices?.[0]?.name || 'RunPod GPU',turboReady:lora.includes('minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors')});
     }

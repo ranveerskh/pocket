@@ -27,6 +27,18 @@ export function dimensions(quality: string, aspect: string) {
 }
 export function makeWorkflow(p: any) {
   if (typeof p.prompt !== 'string' || !p.prompt.trim() || p.prompt.length > 20000) throw new Error('Write a prompt between 1 and 20,000 characters.');
+  if (p.custom) {
+    const graph = validateCustomGraph(p.custom.graph);
+    const map = p.custom.map || {};
+    const put = (target:any,value:any) => { if(!target) return; if(typeof target.node!=='string'||typeof target.input!=='string'||!graph[target.node]||!Object.hasOwn(graph[target.node].inputs,target.input)) throw new Error('Invalid workflow field mapping.'); graph[target.node].inputs[target.input]=value; };
+    if(!map.prompt) throw new Error('Map a prompt field before using this workflow.');
+    put(map.prompt,p.prompt.trim());
+    if(map.seed) { if(!Number.isSafeInteger(p.seed)||p.seed<0) throw new Error('Invalid seed.'); put(map.seed,p.seed); }
+    const [width,height]=dimensions(p.quality,p.aspect); put(map.width,width); put(map.height,height);
+    if(map.duration) { if(![4,5,6,8,10].includes(Number(p.duration))) throw new Error('Choose a supported duration.'); put(map.duration,Number(p.duration)); }
+    if(p.image) { if(!map.image) throw new Error('This workflow has no reference image mapping.'); if(typeof p.image!=='string'||p.image.includes('..')||p.image.startsWith('/')) throw new Error('Invalid reference image.'); put(map.image,p.image); }
+    return graph;
+  }
   if (p.mode === 'image') {
     if (!Number.isSafeInteger(p.seed) || p.seed < 0) throw new Error('Seed must be a positive whole number.');
     const graph: any = structuredClone(imageTemplate); const [width,height] = dimensions(p.quality,p.aspect);
@@ -59,4 +71,13 @@ export function videoFiles(item: any) {
     if (f && typeof f.filename === 'string' && /\.(mp4|webm|mov|mkv|png|jpg|jpeg|webp)$/i.test(f.filename)) results.push({filename:f.filename,subfolder:f.subfolder || '',type:f.type || 'output'});
   }
   return results.filter((f,i,a)=>a.findIndex(x=>x.filename===f.filename && x.subfolder===f.subfolder)===i);
+}
+
+export function validateCustomGraph(value:any):Record<string,any> {
+ if(!value||typeof value!=='object'||Array.isArray(value)||value.nodes) throw new Error('Import ComfyUI Export (API) JSON.');
+ const entries=Object.entries(value);if(!entries.length||entries.length>400||JSON.stringify(value).length>2*1024*1024) throw new Error('Workflow must contain 1–400 nodes and be under 2 MB.');
+ for(const [id,node] of entries as [string,any][]) { if(!id||!node||typeof node.class_type!=='string'||!node.inputs||typeof node.inputs!=='object'||Array.isArray(node.inputs)) throw new Error('Invalid API workflow node.'); }
+ const graph=structuredClone(value);
+ for(const node of Object.values(graph) as any[]) for(const input of Object.values(node.inputs)) if(Array.isArray(input)&&input.length===2&&typeof input[0]==='string'&&typeof input[1]==='number'&&!Object.hasOwn(graph,input[0])) throw new Error('Workflow references missing node '+input[0]);
+ return graph;
 }
