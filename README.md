@@ -62,7 +62,7 @@ Open `http://localhost:8888` for the full app including API routes. `npm run dev
 
 - This package contains no personal RunPod endpoint, token or API key. Each browser supplies its own RunPod URL. No endpoint is saved server-side.
 - This self-hosted version has no ChatGPT sign-in gate. Its webpage is public unless you configure access protection in Netlify.
-- Settings, prompt and up to 30 job records live in that browser's localStorage. They do not sync across devices/domains or with the original ChatGPT-hosted page.
+- Settings, prompt and gallery records live in that browser's localStorage. They do not sync across devices/domains or with the original ChatGPT-hosted page.
 - Generated files stay on RunPod. Keep the pod running for preview/download and download files before deleting storage.
 - Removing a local record does not delete the original RunPod output.
 - JPG, PNG and WebP references under 15 MB are supported. Export HEIC photos as JPG first.
@@ -83,3 +83,43 @@ The production frontend build, TypeScript and mocked workflow/API checks passed 
 - `netlify.toml`: build and deployment configuration.
 
 Official deployment reference: https://docs.netlify.com/build/edge-functions/get-started/
+
+
+## Version 2: manual models, gallery folders, PIN and templates
+
+### Add a model yourself
+
+1. Install and test the model/workflow on your RunPod in ComfyUI.
+2. In ComfyUI choose **Export (API)**.
+3. In Pocket Studio open **Workflows → Import JSON** and choose that file.
+4. Set the display name and image/video output type. Check the detected prompt, seed, size, duration and optional reference-image mappings, then **Save workflow**.
+5. Choose it in the **Workflow** dropdown on Create, or click **Use** in Workflows. Test the connection before generating.
+
+No GitHub edit or Netlify rebuild is needed for future browser-local workflow imports. Importing JSON does not install or download model files or nodes. A normal UI workflow JSON with `nodes`/`links` is not supported: export API format instead.
+
+Prompt mapping is required. Unmapped settings remain as written in your JSON. Map both width and height together or leave both unchanged. Duration mappings must accept **seconds**, not frames; workflows that derive a frame count from a duration input can map that seconds input. Otherwise leave duration unmapped. Reference images map to an existing `LoadImage.image` input. Save original workflow JSONs separately; imported workflows and edits are local to this browser. Model filenames currently come from your JSON, not from a model marketplace.
+
+### Gallery and folders
+
+- Gallery displays image/video thumbnails with filters and prompt search. Open a tile for a full preview, download, reuse, reference-image action or folder move.
+- New folder creates a local organizational folder. Manage folders to rename or remove one. Removing a folder moves its items to Unfiled without deleting media.
+- Select **Save to folder** on Create to file new generations automatically.
+- Folder organization does not create directories on RunPod. Thumbnail availability depends on the pod and original files.
+
+### Gallery PIN
+
+- **Gallery → Set PIN** creates a 6–12 digit PIN. Confirm the PIN, then use **Lock now**.
+- **PIN settings** lets an unlocked user change or remove protection.
+- Locking or reloading requires unlocking before gallery records/folders can be read or new generation records can be saved. An existing GPU job continues on RunPod while locked; after unlocking its status is refreshed.
+- The browser's saved gallery records (including folder names, media paths and prompts in those records) are encrypted with AES-256-GCM. The key is derived with PBKDF2-SHA256 and held in memory while unlocked. Each save uses a fresh random IV.
+- This feature requires **HTTPS** (as Netlify provides) or a browser-trusted localhost development origin. A custom insecure HTTP preview may not support Web Crypto.
+- There is no PIN recovery. Keep the PIN safe and download important media before clearing browser/site data. Imported workflow JSONs, general connection settings and template choices are stored separately from the gallery vault.
+- The lock protects this browser's local gallery. It does not put a PIN on RunPod files or its ComfyUI history, and does not create an account or cross-device synchronization.
+
+### Built-in generation templates
+
+Template buttons independently toggle instructions such as Cinematic, Photoreal, Continuity lock, One speaker, Immediate dialogue, No text/logos, Natural sound, Portrait lighting and Product studio. Compatible toggles are appended to the prompt only when generating. **All off** disables them; **See applied instructions** shows the exact text. The original draft is saved separately so reusing a creation does not duplicate its template instructions.
+
+### Additional checks
+
+Imported-workflow mappings, invalid imports/mappings, template on/off behavior, encrypted gallery save/read and wrong-PIN rejection are covered by `npm test`, alongside the existing workflow and API mock checks. A live Netlify/RunPod generation test still requires your deployed site and running pod.
