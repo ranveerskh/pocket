@@ -1,2 +1,10 @@
-import {defineConfig} from 'vite';
-export default defineConfig({esbuild:{jsx:'automatic'},build:{outDir:'dist'}});
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  oxc: {
+    jsx: { runtime: 'automatic' },
+  },
+  build: {
+    outDir: 'dist',
+  },
+});
