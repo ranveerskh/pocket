@@ -42,3 +42,12 @@ assert.throws(()=>bm.parseBulk(Array(51).fill('*prompt*').join('\n')));
 assert.throws(()=>bm.parseBulk('*'+ 'x'.repeat(20001)+'*'));
 assert.deepEqual([...bm.parseBulk('*literal*\nsecond','lines')],['*literal*','second']);
 console.log('Star-delimited multiline batches: 4, 5 and 50 prompts, limits and malformed input passed.');
+
+const alerts=compile('src/completion-model.ts');
+const alertJobs=[{id:'one',base:'pod-a',state:'running'},{id:'two',base:'pod-a',state:'queued'},{id:'hidden',base:'pod-a',state:'running',hidden:true},{id:'old',base:'pod-a',state:'complete'},{id:'failed',base:'pod-a',state:'running'}];
+const completedJobs=alertJobs.map(j=>({...j,state:j.id==='failed'?'error':'complete'}));
+assert.equal(alerts.completedSince(alerts.completionSnapshot(alertJobs),completedJobs).map(j=>j.id).join(','),'one,two');
+assert.equal(alerts.completedSince(alerts.completionSnapshot(completedJobs),completedJobs).length,0);
+assert.equal(alerts.completedSince(alerts.completionSnapshot(alertJobs),[{id:'one',base:'pod-b',state:'complete'}]).length,0);
+assert.equal(alerts.completedSince(alerts.completionSnapshot([]),completedJobs).length,0);
+console.log('Completion alerts: single/bulk transitions, repeat suppression, private items, failures and restored history passed.');
