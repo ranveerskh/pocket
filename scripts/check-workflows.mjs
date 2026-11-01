@@ -28,3 +28,17 @@ scenario='none';for(let start=0;start<50;start+=5){const result=await post({acti
 failAt=submitCount+1;result=await post({action:'bulk',batch_id:'partial-batch',mode:'image',quality:'draft',aspect:'square',items:[{index:0,prompt:'first',seed:1},{index:1,prompt:'fail',seed:2},{index:2,prompt:'not submitted',seed:3}]});const partial=await result.json();assert.equal(partial.items.length,1);assert.ok(partial.partial_error.includes('Simulated'));
 const downloads=compile('src/DownloadButton.tsx');assert.equal(downloads.fileType('clip.mp4'),'video/mp4');assert.equal(downloads.fileType('image.png'),'image/png');
 console.log('Passed 50-item queue chunks, duplicate prevention, partial failure/recovery, batch status, prompt parsing and media MIME handling.');
+
+// Long prompts retain line breaks and empty lines; marker errors cannot silently submit partial input.
+for (const n of [4,5,50]) {
+ const prompts=Array.from({length:n},(_,i)=>`Scene ${i+1}\nCamera detail\n\nDialogue: hello.`);
+ assert.deepEqual([...bm.parseBulk(prompts.map(p=>`*${p}*`).join('\n\n'))],prompts);
+}
+assert.deepEqual([...bm.parseBulk('*one**two*')],['one','two']);
+assert.throws(()=>bm.parseBulk('*one*\n*unfinished'));
+assert.throws(()=>bm.parseBulk('*one* stray text'));
+assert.throws(()=>bm.parseBulk('**'));
+assert.throws(()=>bm.parseBulk(Array(51).fill('*prompt*').join('\n')));
+assert.throws(()=>bm.parseBulk('*'+ 'x'.repeat(20001)+'*'));
+assert.deepEqual([...bm.parseBulk('*literal*\nsecond','lines')],['*literal*','second']);
+console.log('Star-delimited multiline batches: 4, 5 and 50 prompts, limits and malformed input passed.');
