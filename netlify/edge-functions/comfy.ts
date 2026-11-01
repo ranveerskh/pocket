@@ -24,6 +24,26 @@ export default async function comfy(req: Request) {
       const lora = loraInfo.LoraLoaderModelOnly?.input?.required?.lora_name?.[0] || [];
       return Response.json({connected:true,device:stats.devices?.[0]?.name || 'RunPod GPU',turboReady:lora.includes('minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors')});
     }
+    if (p.action === 'bulk' || p.action === 'recover_batch' || p.action === 'statuses') {
+      const [history,queue]=await Promise.all([jsonUp(base,'/history?max_items=500'),jsonUp(base,'/queue')]);
+      const queued=[...(queue.queue_running||[]),...(queue.queue_pending||[])];
+      if(p.action==='statuses') {
+        if(!Array.isArray(p.ids)||p.ids.length>100||p.ids.some((id:any)=>typeof id!=='string'||!/^[a-zA-Z0-9-]+$/.test(id))) throw new Error('Invalid job IDs.');
+        const statuses:Record<string,any>={};
+        for(const id of p.ids){const item=history[id];if(item){const failed=item.status?.status_str==='error';const error=item.status?.messages?.find((m:any)=>m[0]==='execution_error')?.[1];statuses[id]={state:failed?'error':item.status?.completed?'complete':'running',files:videoFiles(item),error:error?.exception_message||null};}else{const running=queue.queue_running?.some((q:any)=>q[1]===id);const idx=queue.queue_pending?.findIndex((q:any)=>q[1]===id)??-1;statuses[id]={state:running?'running':idx>=0?'queued':'unknown',position:idx+1};}}
+        return Response.json({statuses});
+      }
+      if(typeof p.batch_id!=='string'||!/^[a-zA-Z0-9-]+$/.test(p.batch_id))throw new Error('Invalid batch ID.');
+      const found=new Map<number,string>();
+      for(const q of queued)if(q[3]?.pocket_batch_id===p.batch_id)found.set(Number(q[3].pocket_item_index),q[1]);
+      for(const [id,item] of Object.entries(history) as [string,any][])if(item.prompt?.[3]?.pocket_batch_id===p.batch_id)found.set(Number(item.prompt[3].pocket_item_index),id);
+      if(p.action==='recover_batch')return Response.json({items:[...found].map(([index,id])=>({index,id}))});
+      if(!Array.isArray(p.items)||!p.items.length||p.items.length>5)throw new Error('Submit 1–5 prompts per request.');
+      if(p.items.some((x:any)=>!Number.isInteger(x.index)||x.index<0||x.index>=50))throw new Error('Invalid batch item index.');
+      const prepared=p.items.map((x:any)=>({index:x.index,graph:makeWorkflow({...p,prompt:x.prompt,seed:x.seed})}));const submitted=[];let partial_error='';
+      for(const item of prepared){if(found.has(item.index)){submitted.push({index:item.index,id:found.get(item.index)});continue;}try{const result=await jsonUp(base,'/prompt',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:item.graph,client_id:p.batch_id,extra_data:{pocket_batch_id:p.batch_id,pocket_item_index:item.index}})});submitted.push({index:item.index,id:result.prompt_id});}catch(e){partial_error=(e as Error).message;break;}}
+      return Response.json({items:submitted,partial_error});
+    }
     if (p.action === 'generate') return Response.json(await jsonUp(base,'/prompt',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:makeWorkflow(p),client_id:crypto.randomUUID()})}));
     if (p.action === 'status') {
       if (typeof p.id !== 'string' || !/^[a-zA-Z0-9-]+$/.test(p.id)) throw new Error('Invalid job ID.');

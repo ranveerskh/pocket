@@ -1,0 +1,3 @@
+import {useState} from 'react';
+import {ClipboardPaste} from 'lucide-react';
+export default function PasteButton({onPaste,disabled=false}:{onPaste:(text:string)=>void;disabled?:boolean}){const[error,setError]=useState('');async function paste(){try{const text=await navigator.clipboard.readText();if(!text)throw new Error('Clipboard is empty.');onPaste(text);setError('');}catch{setError('Clipboard access unavailable. Long-press the text box and choose Paste.');}}return <span className="paste-control"><button className="text-button" onClick={paste} disabled={disabled}><ClipboardPaste size={14}/>Paste</button>{error&&<small role="status">{error}</small>}</span>;}

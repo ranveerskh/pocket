@@ -155,3 +155,41 @@ A timing bucket also matches the workflow, resolution preset, frame/aspect, Turb
 On the first matching generation the bar is indeterminate. Later runs estimate progress from the last matched time, with a cap of 95% until ComfyUI reports completion. At completion the bar reaches 100%. A slower-than-history run stays active and explicitly says it is taking longer.
 
 This is a time estimate, not actual sampler/GPU progress. Times include queue and model loading and are observed at status polling intervals, so completion measurement can lag by about one polling interval. Longest recorded is historical, not a promise or time limit. Hiding an item does not erase its timing; deleting its local record removes that sample from history. Locking pauses browser status polling; after unlocking the job is checked again, so timing can include that locked interval.
+
+## Version 4 — paste, 50-prompt RunPod queue, private footer access and safe downloads
+
+### Paste and bulk generation
+
+The single-prompt editor and Bulk generation panel have a Paste button. Clipboard permissions are controlled by the browser; if access is refused, long-press the input and use the native Paste action.
+
+Expand **Bulk generation** on Create. Paste up to 50 prompts and choose one prompt per line, or multi-line prompts separated by a blank line. All items use the currently selected workflow, templates, duration/size, project and optional reference image. Each item gets a random seed unless you explicitly set a seed.
+
+Click **Queue prompts** once. The page submits small groups of five to ComfyUI and displays the added count. Wait until **all prompts are queued** before closing your phone. ComfyUI's own execution queue processes them sequentially, so the next queued generation starts when the previous job finishes (or fails). The pod and ComfyUI must remain running. No scheduled ChatGPT task or always-open browser is involved after submission.
+
+Stop adding remaining prompts stops future groups, but already queued jobs continue on RunPod. Existing active/pending jobs belonging to other sessions are not cleared or interrupted.
+
+Batch items carry a batch ID and item index in ComfyUI metadata. Interrupted submissions are labelled unconfirmed. Use **Recover queue status** to reconcile those records against the pod queue and recent history. Recovery never automatically resubmits missing/ambiguous items. The backend avoids adding an item again when its batch/index is already found. This is not a distributed lock across simultaneous independent requests; do not submit the same batch concurrently from multiple tabs. Source-of-truth execution lives on RunPod; clearing its queue/history or restarting/deleting the pod can remove recovery information. The recent-history lookup covers 500 records.
+
+The browser polls statuses for queued jobs in batches rather than opening 50 separate render-status requests. Successful completion timings remain separate by duration/settings.
+
+### Discreet private gallery
+
+There is no Hidden-items tab, project card or count in the public gallery. Click **Pocket Studio · Version 4** in the footer, enter the gallery PIN, and the private gallery opens. If no PIN exists, this entry sets one first. Each new footer entry asks for the PIN even when the general gallery was already unlocked. Closing the private view, changing the main navigation or backgrounding the page closes private access. The ordinary optional gallery lock remains available.
+
+Hiding an item removes its project association. It is excluded from public project covers/counts, All creations, public searches, the current Create preview and public timing-history samples. Unhide returns it to Unfiled, after which it can be moved to a project. Old hidden records with project assignments are detached on load/unlock. Private items can be reused, downloaded, selected/deleted or unhidden after PIN access.
+
+The PIN protects this browser's encrypted gallery records at rest; the private-view gate controls the visible interface. It does not protect RunPod's originals or its ComfyUI API/history from someone who already has access to that pod.
+
+### Select and delete
+
+Inside a gallery/project/private view choose **Select items**, select thumbnails (or Select all in view), then **Delete selected**. Active or unconfirmed submissions are not selectable for deletion. Confirm before records are removed. As before, deleting gallery records keeps the original RunPod files; this app does not provide filesystem deletion on RunPod.
+
+### iPhone Home Screen downloads
+
+Download buttons now fetch the media inside the studio and open a small save panel instead of navigating the installed app to `/api/media`. After preparation, tap **Save / Share file**, then choose Save Video, Save Image or Save to Files in the iOS sheet. The second explicit tap supplies the user gesture required by the Web Share API. If sharing is unavailable, the panel offers **Open download in Safari** in a separate browser context. It never automatically replaces the studio page.
+
+Desktop browsers also have a blob-file Save button. A 150 MB Content-Length guard routes large files to the separate browser download option to limit in-app memory use; absent/misreported size headers can still require memory for the full file. Web Share/browser support differs; real iPhone installed-app behavior must be verified on the device. No claim of an end-to-end iOS test is made from the desktop build.
+
+### Verification
+
+`npm run build` and `npm test` cover the updated bundle, 50-item batches in groups of five, duplicate detection, partial failure and recovery, bulk status reconciliation, prompt parsing, encrypted records, hidden/project filtering, timing and MIME handling. These are mock/API logic checks; no live 50-video GPU job was started during development.
