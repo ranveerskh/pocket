@@ -15,3 +15,21 @@
 /* Version 4: queue, private footer entry, selection and in-app saving */
 .prompt-tools{display:flex;gap:14px;align-items:center}.paste-control{display:inline-flex;flex-direction:column;align-items:flex-end;max-width:220px}.paste-control small{font-size:9px;color:#d5ae9e;line-height:1.6;margin-top:5px;text-align:right}.footer-brand{background:none;border:0;padding:0;color:#8b7c96;font-size:8px;letter-spacing:1px;cursor:pointer}.footer-brand:hover{color:#d3b1ec}.private-pin-note{font-size:12px;line-height:1.8;color:#af98bf;margin:5px 0 20px}.pin-modal>input{margin-bottom:18px;font-size:20px;letter-spacing:4px}.pin-modal .modal-heading h2{display:flex;align-items:center;gap:9px}.selection-toolbar{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:15px;border:1px solid #6d4b85;background:#30213e;border-radius:8px;margin-bottom:16px}.selection-toolbar strong{font-size:11px;color:#d4b8e8}.selection-toolbar .danger{margin-left:auto}.tile-selected{outline:3px solid #d0a4f4;outline-offset:-3px}.tile-select-check{position:absolute;right:11px;top:11px;width:25px;height:25px;border:2px solid #c7a2e3;background:#1c1128b9;border-radius:50%;display:grid;place-items:center}.tile-select-check.checked{background:#c9a0e9;color:#281134}.bulk-panel{margin:0 0 24px;border-color:#594166;background:#1e1925}.bulk-heading{display:flex;gap:12px;align-items:center;text-align:left;width:100%;border:0;background:none;padding:20px 22px;color:#d0b7e4}.bulk-heading>span:first-of-type{flex:1}.bulk-heading strong{display:block;font-size:13px;font-weight:500}.bulk-heading small{display:block;color:#9980ac;font-size:10px;margin-top:6px}.bulk-heading>span:last-child{font-size:20px}.bulk-content{padding:0 22px 22px}.bulk-content select{margin-bottom:12px;max-width:500px}.bulk-content textarea{min-height:190px}.bulk-note{font-size:10px;line-height:1.8;color:#a08aac;margin:15px 0}.bulk-success{display:flex;gap:8px;color:#b1d3b6;font-size:11px;line-height:1.8;margin:18px 0}.bulk-success svg{flex-shrink:0;margin-top:3px}.bulk-stop{margin-top:16px}.download-dialog{width:100%;max-width:440px;padding:25px}.download-name{font-size:12px;color:#a88abd;overflow-wrap:anywhere;padding:8px 0 18px}.download-loading{display:flex;align-items:center;gap:15px;color:#c7a5e1;min-height:120px}.download-loading p{font-size:12px;line-height:1.8}.download-loading small{font-size:10px;color:#9173a5}.download-instruction{font-size:12px;line-height:1.8;color:#c5a7d9;margin-bottom:20px}.download-backdrop{z-index:90}.direct-download{margin-top:13px;width:100%}.download-note{font-size:9px;color:#8f719f;line-height:1.8;margin-top:9px}.safari-download{margin-top:20px}.download-done{font-size:11px;color:#b1d2b8;margin-top:17px}.private-close{margin-left:auto}.delete-note strong{color:#f6b8c3}
 @media(max-width:650px){.bulk-heading{padding:18px}.bulk-content{padding:0 17px 19px}.bulk-content textarea{font-size:16px}.bulk-content select{font-size:13px}.bulk-note{font-size:10px}.gallery-toolbar>.button{width:100%;min-height:42px}.selection-toolbar{gap:10px}.selection-toolbar .danger{width:100%;justify-content:center;margin:5px 0 0}.download-dialog{padding:23px 18px}.download-instruction{font-size:12px}.footer-brand{font-size:8px;min-height:35px}.paste-control{max-width:180px}.prompt-tools{gap:8px}.prompt-tools .text-button{font-size:11px;min-height:35px}}
+
+/* Give the workflow controls their own space, independent of the removed intro. */
+.mode-switch{margin:28px 0 0}
+.workflow-selector{margin:24px 0 28px}
+.workflow-selector select{flex:1;min-width:0}
+.workflow-selector>.text-button{flex-shrink:0;min-height:44px}
+@media(max-width:650px){
+ .mode-switch{margin:24px 0 0;max-width:none}
+ .workflow-selector{margin:20px 0 28px;gap:12px}
+ .bulk-panel{margin-bottom:28px}
+ .bulk-heading{gap:14px;padding:20px 18px}
+ .bulk-heading small{line-height:1.6}
+ .editor .field-label{align-items:flex-start;flex-direction:column;gap:7px;margin-bottom:14px}
+ .editor .field-label span{font-size:10px;line-height:1.6}
+ .prompt-footer{gap:12px;flex-wrap:wrap}
+}
+.workspace>*{min-width:0}
+@media(max-width:650px){.workspace{grid-template-columns:minmax(0,1fr)}}
