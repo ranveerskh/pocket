@@ -3,26 +3,32 @@ export default async function comfy(req: Request) {
   try {
     if (req.headers.get('origin') && req.headers.get('origin') !== new URL(req.url).origin) return Response.json({error:'Cross-site request rejected.'},{status:403});
     if ((req.headers.get('content-type') || '').includes('multipart/form-data')) {
-      const form = await req.formData(); const base = runpodURL(String(form.get('base') || '')); const file = form.get('image');
-      if (!(file instanceof File) || file.size > 15*1024*1024 || !['image/png','image/jpeg','image/webp'].includes(file.type)) throw new Error('Choose a JPG, PNG or WebP image under 15 MB.');
-      const upload = new FormData(); upload.set('image',file,'pocket-'+crypto.randomUUID()+'.'+({'image/png':'png','image/jpeg':'jpg','image/webp':'webp'}[file.type])); upload.set('type','input');
+      const form=await req.formData(),base=runpodURL(String(form.get('base')||''));
+      const voice=form.get('kind')==='audio',file=form.get(voice?'audio':'image');
+      const imageExt:Record<string,string>={'image/png':'png','image/jpeg':'jpg','image/webp':'webp'};
+      const audioExt:Record<string,string>={'audio/wav':'wav','audio/x-wav':'wav','audio/wave':'wav','audio/mpeg':'mp3','audio/mp3':'mp3','audio/mp4':'m4a','audio/x-m4a':'m4a','audio/aac':'aac','audio/flac':'flac','audio/x-flac':'flac','audio/ogg':'ogg','audio/webm':'webm'};
+      if(!(file instanceof File)||!file.size||file.size>15*1024*1024)throw new Error('Choose a non-empty reference file under 15 MB.');
+      const ext=(voice?audioExt:imageExt)[file.type];if(!ext)throw new Error(voice?'Use WAV, MP3, M4A, AAC, FLAC, OGG or WebM audio.':'Use JPG, PNG or WebP images.');
+      // ComfyUI stores images AND audio through its generic /upload/image endpoint.
+      const upload=new FormData();upload.set('image',file,'pocket-'+crypto.randomUUID()+'.'+ext);upload.set('type','input');
       return Response.json(await jsonUp(base,'/upload/image',{method:'POST',body:upload}));
     }
     const p: any = await req.json(); const base = runpodURL(String(p.base || ''));
     if (p.action === 'connect') {
       const stats = await jsonUp(base,'/system_stats');
-      const types = [...new Set(Object.values(makeWorkflow({prompt:'Connection check',duration:5,seed:1,quality:'draft',aspect:'landscape',mode:p.mode,custom:p.custom})).map((n: any)=>n.class_type))];
+      const types = [...new Set(Object.values(makeWorkflow({prompt:'Connection check',duration:5,seed:1,quality:'draft',aspect:'landscape',mode:p.mode,custom:p.custom,preflight:true})).map((n: any)=>n.class_type))];
+      if(p.mode==='r2v')for(const type of ['LoadImage','LoadAudio'])if(!types.includes(type))types.push(type);
       if(types.length>100) throw new Error('This connection check supports up to 100 different node types.');
       const checked = await Promise.all(types.map(async type => { const info = await jsonUp(base,'/object_info/'+encodeURIComponent(type)); return {type,info:info[type]}; }));
       const missing = checked.filter(x=>!x.info).map(x=>x.type);
       if (missing.length) throw new Error('This pod is missing workflow nodes: '+missing.join(', ')+'. Open the selected workflow in ComfyUI and install its requirements.');
-      const graph = makeWorkflow({prompt:'Connection check',duration:5,seed:1,quality:'draft',aspect:'landscape',mode:p.mode,custom:p.custom});
+      const graph = makeWorkflow({prompt:'Connection check',duration:5,seed:1,quality:'draft',aspect:'landscape',mode:p.mode,custom:p.custom,preflight:true});
       const needed = Object.values(graph).flatMap((node:any) => ['UNETLoader','CLIPLoader','VAELoader'].includes(node.class_type) ? Object.entries(node.inputs).filter(([key])=>['unet_name','clip_name','vae_name'].includes(key)).map(([key,name])=>[node.class_type,key,name]) : []);
       const missingModels = needed.filter(([type,key,name]) => { const info = checked.find(x=>x.type===type)?.info; const options = info?.input?.required?.[key]?.[0]; return Array.isArray(options) && !options.includes(name); }).map(x=>x[2]);
       if(missingModels.length) throw new Error('Missing model files: '+missingModels.join(', '));
       const loraInfo = p.custom || p.mode === 'image' ? {} : await jsonUp(base,'/object_info/LoraLoaderModelOnly');
       const lora = loraInfo.LoraLoaderModelOnly?.input?.required?.lora_name?.[0] || [];
-      return Response.json({connected:true,device:stats.devices?.[0]?.name || 'RunPod GPU',turboReady:lora.includes('minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors')});
+      return Response.json({connected:true,device:stats.devices?.[0]?.name || 'RunPod GPU',turboReady:lora.includes(p.mode==='r2v'?'minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors':'minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors')});
     }
     if (p.action === 'bulk' || p.action === 'recover_batch' || p.action === 'statuses') {
       const [history,queue]=await Promise.all([jsonUp(base,'/history?max_items=500'),jsonUp(base,'/queue')]);

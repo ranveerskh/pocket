@@ -1,5 +1,6 @@
 import template from './workflow.ts';
 import imageTemplate from './image-workflow.ts';
+import r2vTemplate from './r2v-workflow.ts';
 export function runpodURL(value: string) {
   let u: URL;
   try { u = new URL(value.trim()); } catch { throw new Error('Paste the full HTTPS ComfyUI link from RunPod → Connect.'); }
@@ -38,6 +39,27 @@ export function makeWorkflow(p: any) {
     if(map.duration) { if(![4,5,6,8,10].includes(Number(p.duration))) throw new Error('Choose a supported duration.'); put(map.duration,Number(p.duration)); }
     if(p.image) { if(!map.image) throw new Error('This workflow has no reference image mapping.'); if(typeof p.image!=='string'||p.image.includes('..')||p.image.startsWith('/')) throw new Error('Invalid reference image.'); put(map.image,p.image); }
     return graph;
+  }
+  if (p.mode === 'r2v') {
+    if (![4,5,6,8,10].includes(Number(p.duration))) throw new Error('Choose a supported duration.');
+    if (!Number.isSafeInteger(p.seed) || p.seed < 0) throw new Error('Invalid seed.');
+    const graph:any=structuredClone(r2vTemplate),[width,height]=dimensions(p.quality,p.aspect);
+    const images=p.references?.images||[],audios=p.references?.audios||[];
+    if(!Array.isArray(images)||!Array.isArray(audios)||images.length>3||audios.length>3)throw new Error('Select up to 3 character references.');
+    if(!p.preflight&&!images.length&&!audios.length)throw new Error('Select at least one character photo or voice for R2V.');
+    if(audios.some((r:any)=>typeof r.seconds!=='number'||r.seconds<2||r.seconds>15)||audios.reduce((sum:number,r:any)=>sum+r.seconds,0)>15.05)throw new Error('Voice references must be 2–15 seconds each and at most 15 seconds combined.');
+    const validPath=(path:any)=>{if(typeof path!=='string'||path.length>300||!path||path.includes('..')||path.startsWith('/')||path.includes('\\')||path.includes('[')||path.includes(']'))throw new Error('Invalid reference file path.');return path;};
+    const cond=graph['136'].inputs;
+    for(const key of Object.keys(cond))if(key.startsWith('ref_images.')||key.startsWith('ref_audios.'))delete cond[key];
+    delete graph['137'];delete graph['139'];
+    images.forEach((r:any,i:number)=>{const id='pocket-ref-image-'+i;graph[id]={class_type:'LoadImage',inputs:{image:validPath(r.path)}};cond['ref_images.ref_image_'+i]=[id,0];});
+    audios.forEach((r:any,i:number)=>{const id='pocket-ref-audio-'+i;graph[id]={class_type:'LoadAudio',inputs:{audio:validPath(r.path)}};cond['ref_audios.ref_audio_'+i]=[id,0];});
+    cond.prompt=p.prompt.trim();cond.width=width;cond.height=height;cond.length=Math.max(101,Math.ceil((Number(p.duration)*24-5)/17)*17+5);
+    graph['129'].inputs.noise_seed=p.seed;
+    const model=p.turbo===true?'145':'127';graph['126'].inputs.model=[model,0];graph['124'].inputs.model=[model,0];graph['124'].inputs.steps=p.turbo===true?4:20;
+    graph['124'].inputs.scheduler='normal';graph['92'].inputs.filename_prefix='video/PocketStudio_R2V';
+    const keep=new Set<string>();function visit(id:string){if(keep.has(id))return;keep.add(id);for(const v of Object.values(graph[id].inputs))if(Array.isArray(v)&&typeof v[0]==='string'&&graph[v[0]])visit(v[0]);}
+    visit('92');for(const id of Object.keys(graph))if(!keep.has(id))delete graph[id];return graph;
   }
   if (p.mode === 'image') {
     if (!Number.isSafeInteger(p.seed) || p.seed < 0) throw new Error('Seed must be a positive whole number.');

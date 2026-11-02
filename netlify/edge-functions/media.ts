@@ -3,7 +3,7 @@ export default async function media(req: Request) {
   try {
     const q = new URL(req.url).searchParams; const name = q.get('filename') || ''; const folder = q.get('subfolder') || '';
     if(!name || /[\\/]/.test(name) || name.includes('..') || folder.includes('..') || folder.startsWith('/') || folder.includes('\\')) throw new Error('Invalid file.');
-    const params = new URLSearchParams({filename:name,subfolder:folder,type:'output'});
+    const params = new URLSearchParams({filename:name,subfolder:folder,type:q.get('type')==='input'?'input':'output'});
     const headers: Record<string,string> = {}; const range = req.headers.get('range'); if(range) headers.Range=range;
     const r = await upstream(q.get('base') || '', '/view?'+params,{headers});
     if(!r.ok) throw new Error('Video unavailable. Keep this pod running to preview or download.');
