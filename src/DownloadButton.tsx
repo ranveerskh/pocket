@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {Download,X,Share2,LoaderCircle,ExternalLink} from 'lucide-react';
 import type {MediaFile} from './vault';
-export function mediaURL(base:string,file:MediaFile,download=false){return '/api/media?'+new URLSearchParams({base,filename:file.filename,subfolder:file.subfolder||'',download:download?'1':'0'});}
+export function mediaURL(base:string,file:MediaFile,download=false){return '/api/media?'+new URLSearchParams({base,filename:file.filename,subfolder:file.subfolder||'',type:file.type||'output',download:download?'1':'0'});}
 export function fileType(name:string){return /\.mp4$|\.m4v$/i.test(name)?'video/mp4':/\.webm$/i.test(name)?'video/webm':/\.mov$/i.test(name)?'video/quicktime':/\.png$/i.test(name)?'image/png':/\.jpe?g$/i.test(name)?'image/jpeg':/\.webp$/i.test(name)?'image/webp':'application/octet-stream';}
 export default function DownloadButton({base,file,className='download',label='Download'}:{base:string;file:MediaFile;className?:string;label?:string}){
  const[open,setOpen]=useState(false),[loading,setLoading]=useState(false),[prepared,setPrepared]=useState<File|null>(null),[error,setError]=useState(''),[done,setDone]=useState(false),[sharing,setSharing]=useState(false);const controller=useRef<AbortController|null>(null);const blobURL=useRef('');

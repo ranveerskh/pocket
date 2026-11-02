@@ -1,6 +1,6 @@
 {
   "name": "pocket-studio-netlify",
-  "version": "5.0.0",
+  "version": "6.0.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -10,7 +10,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node scripts/check-workflows.mjs"
+    "test": "node scripts/check-workflows.mjs && node scripts/check-gallery.mjs"
   },
   "dependencies": {
     "react": "19.2.6",
