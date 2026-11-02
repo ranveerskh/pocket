@@ -1,6 +1,8 @@
 # Pocket Studio — GitHub + Netlify
 
-Phone-friendly ComfyUI interface with **MiniMax H3 video** and **Z-Image Turbo images**. Your laptop can stay off after deploying; your RunPod pod and ComfyUI must stay running.
+Phone-friendly ComfyUI interface with **MiniMax H3 video** and **Z-Image Turbo images**. Your laptop can stay off after deploying. RunPod/ComfyUI is needed for generation and the first device copy; saved device media plays without the pod.
+
+**Current release: V7.** The device-storage and hidden-only PIN behavior below supersedes historical release notes.
 
 ## Deploy
 
@@ -62,16 +64,16 @@ Open `http://localhost:8888` for the full app including API routes. `npm run dev
 
 - This package contains no personal RunPod endpoint, token or API key. Each browser supplies its own RunPod URL. No endpoint is saved server-side.
 - This self-hosted version has no ChatGPT sign-in gate. Its webpage is public unless you configure access protection in Netlify.
-- Settings, prompt and gallery records live in that browser's localStorage. They do not sync across devices/domains or with the original ChatGPT-hosted page.
-- Generated files stay on RunPod. Keep the pod running for preview/download and download files before deleting storage.
-- Removing a local record does not delete the original RunPod output.
+- Public gallery metadata, settings and drafts live in browser-local storage. Hidden records and their media key are PIN-encrypted. Actual media copies live in IndexedDB. Galleries do not sync across phones/browser profiles/domains.
+- Generated originals remain on RunPod. Completed files are also copied to this device while the app is open. Wait for Saved on this device before stopping the pod if you want local playback.
+- Removing a creation deletes its local media copy and gallery record, while keeping the original RunPod output.
 - JPG, PNG and WebP references under 15 MB are supported. Export HEIC photos as JPG first.
 - The app never starts/stops the pod or changes RunPod billing.
 - Netlify handles short API requests and streams media. GPU generation is queued asynchronously on RunPod. Hosting usage/limits follow your Netlify account's plan.
 
 ## Verification
 
-The production frontend build, TypeScript and mocked workflow/API checks passed before packaging. **No live RunPod endpoint was provided, so actual GPU generation and an actual Netlify deployment remain unverified.**
+The production frontend build, TypeScript and mocked workflow/API checks passed before packaging. GPU checks use mocked endpoints; no paid GPU test job was submitted. Device import and local Blob playback were tested in the browser, including persistence after reload. Native iPhone Save/Share behavior still requires checking on the actual phone.
 
 ## Source map
 
@@ -212,3 +214,18 @@ Completion alerts now have a persistent Notifications on/off preference plus a s
 At most 20 timing samples are retained globally across all completed jobs. Old elapsedSeconds fields are removed on load, unlock, and job updates. Gallery records, prompts, output links, and completion dates are preserved. The remaining samples still use separate buckets for duration/workflow/size/GPU and R2V image/audio counts.
 
 Validation uses generated API graphs and mocked ComfyUI endpoints, including audio uploads and bulk references. Browser QA covers workflow controls and alert preferences. An actual R2V GPU render and real iPhone audio/voice fidelity require a live pod/device check; no quality or identity guarantee is implied.
+
+
+## Version 7: each phone keeps its own media
+
+- Completed jobs copy their output files into IndexedDB one at a time. Existing gallery files are copied too if their saved RunPod link is reachable. Missing/offline files and quota failures stay visible as errors; Retry device copies retries them. Closing/suspending the app can interrupt copying; reopening resumes missing copies. The app never auto-deletes RunPod files.
+- Playback, Save to phone, and image reuse read the device Blob first. A saved file can play with the original pod offline. The Saved on this device badge confirms local file keys, not a cloud backup. Another phone does not inherit these records or Blobs.
+- Gallery → Storage & backup exposes Import project ZIP, Retry device copies and a user-triggered persistent-storage request. The browser may decline persistence. Clearing site data or browser eviction can remove local data; keep important exports in Photos/Files.
+- Open a project → Save project ZIP exports its media and generation prompts/settings. All creations and Unfiled can be exported too. Hidden items are always excluded. ZIPs are uncompressed, portable standard ZIPs capped at 512 MB and 500 media files to bound phone memory use. Split larger projects.
+- Import project ZIP validates paths, CRC checksums, sizes, manifest fields and file references before writing. It creates fresh job/project IDs and saves media in one IndexedDB transaction. Existing projects are kept; metadata failure rolls back the new media. Imported completed media does not need a RunPod link. Queued prompt-only records become archived prompts rather than resubmitted GPU jobs.
+- Project ZIPs include media/prompts/settings, not model weights, custom workflow graphs or saved character photo/voice presets. Those must be configured separately for another generation. Pod URLs, hidden items, PINs and account credentials are not exported.
+- Save dialogs prepare files first and then offer a separate Save/Share click to preserve the iPhone user gesture. No download automatically navigates the app away. Browser download-event automation did not capture a desktop save event, so no automated end-to-end native-download claim is made; ZIP interoperability and Blob preparation were independently checked.
+- Only Hidden needs a PIN. Hidden media Blobs use AES-GCM with a random media key wrapped inside the PIN-encrypted vault. PIN changes preserve this media key; locking removes it from memory. Hiding converts cached Blobs before moving a record into Hidden; unhiding decrypts device Blobs. Public projects and generation remain usable with Hidden locked. Old whole-gallery vaults migrate after one unlock with the old PIN.
+- A service worker caches only the static app shell/assets for reopening offline after successful installation on HTTPS. API responses are excluded; private media lives in IndexedDB. Generation still needs connectivity and a running pod. Do not interpret local galleries as per-user RunPod authorization: people with access to the same pod can still access its original output/API.
+
+Validation: TypeScript/production build; existing workflow/bulk/API regressions; archive roundtrip and Python ZIP interoperability; malformed/corrupt/oversized archive rejection; hidden exclusion; media encryption/wrong-key rejection; serialized media operations; PIN rotation; metadata quota rollback; offline shell fallback. Real browser import showed Saved on this device, a decoded local MP4 Blob with no RunPod base URL, and successful playback after full reload. No real user media or paid GPU job was used for QA.

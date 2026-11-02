@@ -20,3 +20,5 @@ export function parseBulk(text:string,format:BulkFormat='auto'){
  return prompts;
 }
 export function chunks<T>(items:T[],size=5){const out:T[][]=[];for(let i=0;i<items.length;i+=size)out.push(items.slice(i,i+size));return out;}
+
+export function jobsInBatch<T extends {batchId?:string}>(jobs:T[],batchId?:string){return batchId?jobs.filter(j=>j.batchId===batchId):[];}
