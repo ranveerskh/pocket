@@ -1,5 +1,17 @@
 export type Character={id:string;name:string;base:string;image?:string;audio?:string;audioSeconds?:number};
 export type References={images:{path:string;name:string}[];audios:{path:string;name:string;seconds:number}[]};
+// Keep saved choices for each pod separate; stale choices must not block this pod.
+export function currentCharacterIds(characters:Character[],ids:string[],base:string):string[]{
+ const available=new Set(characters.filter(c=>c.base===base).map(c=>c.id));
+ return [...new Set(ids)].filter(id=>available.has(id));
+}
+export function selectCharactersForConnection(characters:Character[],ids:string[],base:string,next:string[]):string[]{
+ const unique=[...new Set(next)];
+ if(unique.some(id=>!characters.some(c=>c.id===id&&c.base===base)))throw new Error('Select references uploaded to this RunPod connection.');
+ characterReferences(characters,unique,base);
+ const other=ids.filter(id=>characters.some(c=>c.id===id&&c.base!==base));
+ return [...new Set([...other,...unique])];
+}
 export function characterReferences(characters:Character[],ids:string[],base:string):References{
  const chosen=ids.map(id=>characters.find(c=>c.id===id)).filter((c):c is Character=>!!c);
  if(chosen.some(c=>c.base!==base))throw new Error('Select references uploaded to this RunPod connection.');

@@ -84,3 +84,23 @@ assert.equal(bm.jobsInBatch([{id:'single'},{id:'bulk',batchId:'b'}],undefined).l
 
 const storageKey='x'.repeat(43);r=await post({action:'storage_status',storageKey});assert.equal(r.status,200);r=await post({action:'storage_plan',storageKey,file:{filename:'test.mp4',subfolder:'video',type:'output'}});assert.equal((await r.json()).file.receipt,'signed-receipt');assert.equal(calls.at(-1)[0],'/pocket-studio/storage/plan');r=await post({action:'storage_delete',storageKey,confirmed:true,receipt:'signed-receipt'});assert.equal((await r.json()).file.status,'deleted');r=await post({action:'storage_delete',storageKey,confirmed:false,receipt:'signed-receipt'});assert.equal(r.status,400);r=await post({action:'storage_status',storageKey:'y'.repeat(43)});assert.equal(r.status,400);assert.match((await r.json()).error,/incorrect/);storageScenario='missing';r=await post({action:'storage_status',storageKey});assert.match((await r.json()).error,/Install/);storageScenario='ok';r=await route.default(new Request('https://studio.test/api/comfy',{method:'POST',headers:{Origin:'https://other.test','Content-Type':'application/json'},body:JSON.stringify({base,action:'storage_delete',storageKey,confirmed:true,receipt:'signed-receipt'})}));assert.equal(r.status,403);
 console.log('Passed protected storage routes, missing-helper feedback, credential rejection, confirmation enforcement and cross-site rejection.');
+
+// Regression: three selected characters from yesterday's pod cannot block today's choices.
+const oldPod='https://old-8188.proxy.runpod.net';
+const migrated=[...['old1','old2','old3'].map(id=>({id,name:id,base:oldPod,image:id+'.png'})),...['mother','daughter','manager'].map(id=>({id,name:id,base,image:id+'.png'}))];
+let scoped=['old1','old2','old3','deleted-id'];
+assert.equal(rm.currentCharacterIds(migrated,scoped,base).length,0);
+for(const id of ['mother','daughter','manager']){const active=rm.currentCharacterIds(migrated,scoped,base);scoped=rm.selectCharactersForConnection(migrated,scoped,base,[...active,id]);}
+assert.equal(rm.currentCharacterIds(migrated,scoped,base).join(','),'mother,daughter,manager');
+assert.equal(rm.currentCharacterIds(migrated,scoped,oldPod).join(','),'old1,old2,old3');
+const currentRefs=rm.characterReferences(migrated,rm.currentCharacterIds(migrated,scoped,base),base);
+assert.equal(currentRefs.images.map(x=>x.name).join(','),'mother,daughter,manager');
+assert.ok(!rm.referencePrompt('scene',currentRefs).includes('old1'));
+scoped=rm.selectCharactersForConnection(migrated,scoped,base,['mother','manager']);
+assert.equal(rm.currentCharacterIds(migrated,scoped,base).join(','),'mother,manager');
+assert.equal(rm.currentCharacterIds(migrated,scoped,oldPod).length,3);
+assert.throws(()=>rm.selectCharactersForConnection(migrated,scoped,base,['old1']),/connection/);
+assert.throws(()=>rm.selectCharactersForConnection([...migrated,{id:'fourth',name:'fourth',base,image:'fourth.png'}],scoped,base,['mother','daughter','manager','fourth']),/3 characters/);
+assert.equal(rm.currentCharacterIds(migrated,['mother','mother','missing'],base).join(','),'mother');
+assert.equal(migrated.length,6);
+console.log('Passed connection-scoped character selection after pod migration, stable Picture order, per-pod limits and retained old selections.');
