@@ -2,7 +2,7 @@
 
 Phone-friendly ComfyUI interface with **MiniMax H3 video** and **Z-Image Turbo images**. Your laptop can stay off after deploying. RunPod/ComfyUI is needed for generation and the first device copy; saved device media plays without the pod.
 
-**Current release: V7.** The device-storage and hidden-only PIN behavior below supersedes historical release notes.
+**Current release: V8.** The device-storage and hidden-only PIN behavior below supersedes historical release notes.
 
 ## Deploy
 
@@ -66,7 +66,7 @@ Open `http://localhost:8888` for the full app including API routes. `npm run dev
 - This self-hosted version has no ChatGPT sign-in gate. Its webpage is public unless you configure access protection in Netlify.
 - Public gallery metadata, settings and drafts live in browser-local storage. Hidden records and their media key are PIN-encrypted. Actual media copies live in IndexedDB. Galleries do not sync across phones/browser profiles/domains.
 - Generated originals remain on RunPod. Completed files are also copied to this device while the app is open. Wait for Saved on this device before stopping the pod if you want local playback.
-- Removing a creation deletes its local media copy and gallery record, while keeping the original RunPod output.
+- Delete opens Device / Pod / Both choices. Device removes app copies and records; Pod keeps app copies/records; Both removes device copies only after Pod deletion is confirmed. Photos/Files exports are separate.
 - JPG, PNG and WebP references under 15 MB are supported. Export HEIC photos as JPG first.
 - The app never starts/stops the pod or changes RunPod billing.
 - Netlify handles short API requests and streams media. GPU generation is queued asynchronously on RunPod. Hosting usage/limits follow your Netlify account's plan.
@@ -229,3 +229,28 @@ Validation uses generated API graphs and mocked ComfyUI endpoints, including aud
 - A service worker caches only the static app shell/assets for reopening offline after successful installation on HTTPS. API responses are excluded; private media lives in IndexedDB. Generation still needs connectivity and a running pod. Do not interpret local galleries as per-user RunPod authorization: people with access to the same pod can still access its original output/API.
 
 Validation: TypeScript/production build; existing workflow/bulk/API regressions; archive roundtrip and Python ZIP interoperability; malformed/corrupt/oversized archive rejection; hidden exclusion; media encryption/wrong-key rejection; serialized media operations; PIN rotation; metadata quota rollback; offline shell fallback. Real browser import showed Saved on this device, a decoded local MP4 Blob with no RunPod base URL, and successful playback after full reload. No real user media or paid GPU job was used for QA.
+
+
+## Version 8: deletion destinations and bulk Pod relinking
+
+Single-item Delete and selected-item Delete open the same three-choice prompt: **Delete From Device**, **Delete From Pod**, and **Delete Both**. Device deletion keeps Pod files; Pod deletion keeps gallery records and device files. Both performs Pod deletion first and preserves device files if the Pod step fails. Imported projects without a Pod source can use Device deletion. Exported Photos/Files copies are never affected.
+
+Select items now offers **Find on current pod** and **Delete**. Bulk Find probes every recorded file of each selected creation, updates a creation's Pod link only when all its files are found, keeps failed records unchanged, and reports per-item results. It does not enumerate or import another user's Pod history. Selected items remain selected after Find so they can be deleted together.
+
+### One-time Pod storage helper installation
+
+Stock ComfyUI history/userdata deletion is not physical output-file deletion. Pod/Both therefore require the included ComfyUI custom-node helper, installed once per ComfyUI installation and protected with its own random bearer key. The app's Pod delete panel includes **Storage setup** with this command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ranveerskh/pocket/main/runpod/install-storage-helper.py -o /tmp/pocket-storage-setup.py && python3 /tmp/pocket-storage-setup.py --comfy /workspace/runpod-slim/ComfyUI
+```
+
+Use `--comfy` with the directory containing `main.py` and `custom_nodes` if your template uses another path. The installer downloads two checksum-verified source files, preserves an existing key, and prints the key for the user to paste into the app. Restart ComfyUI only when generations are idle; do not terminate the Pod. The helper and `storage.key` stay with the ComfyUI directory on persistent storage. Do not commit, share, or export the key. The app keeps entered keys in memory for the open Gallery only, scoped to each Pod URL.
+
+Helper routes are `/pocket-studio/storage/status`, `/plan`, and `/delete`. All require the bearer key. They expose no file-listing route and are limited to individual generated media files under ComfyUI's resolved output directory. Input uploads, model files, directories, parent traversal, and symlinks are rejected. The helper uses held parent-directory descriptors and no-follow opens, so path replacement cannot redirect deletion to a linked outside directory.
+
+Pod review produces a signed, 15-minute receipt bound to the precise path, file identity/stat values and full SHA-256 content. If a readable device copy exists, the app also compares its SHA-256 to prevent deleting a different generation that reused the same filename. Files over 256 MB with a device copy require Jupyter deletion rather than a large mobile hash allocation; the helper itself caps files at 1 GB. Delete requires an explicit confirmation and rechecks the receipt, file identity and content. Changed, missing-at-review, inaccessible or unauthorized files are not silently reported as deleted. A previously reviewed file that is already gone at commit is idempotently reported as already missing.
+
+Successful Pod removals set per-file tombstones in the gallery so the automatic device copier does not immediately refetch deleted outputs. Partial failures preserve device copies and leave failed items selected. A user-triggered Find can reconnect restored files and clear those flags. Shared Pod storage is shared: deleting a Pod original affects all users of that file, regardless of their independent device galleries.
+
+Validation covers all three destinations, failure/partial-failure preservation, multi-file atomic relinking, per-file tombstones, device/Pod hash mismatch rejection, output path restrictions, wrong keys, confirmation enforcement, cross-site rejection, signed receipt expiry/tampering, symlink/path-swap protection, and actual HTTP helper routes against temporary test files. Existing GPU workflows, ZIP import/export, encryption and gallery tests still pass. No actual user Pod files were deleted and no paid generation job was submitted. Live Pod deletion remains dependent on installing the helper on the user's running ComfyUI instance.
