@@ -1,5 +1,5 @@
 import {podStorage} from '../../server/pod-storage.ts';
-import {jsonUp,runpodURL,makeWorkflow,videoFiles,upstream} from '../../server/comfy.ts';
+import {jsonUp,runpodURL,makeWorkflow,videoFiles,historyTiming,upstream} from '../../server/comfy.ts';
 export default async function comfy(req: Request) {
   try {
     if (req.headers.get('origin') && req.headers.get('origin') !== new URL(req.url).origin) return Response.json({error:'Cross-site request rejected.'},{status:403});
@@ -38,7 +38,7 @@ export default async function comfy(req: Request) {
       if(p.action==='statuses') {
         if(!Array.isArray(p.ids)||p.ids.length>100||p.ids.some((id:any)=>typeof id!=='string'||!/^[a-zA-Z0-9-]+$/.test(id))) throw new Error('Invalid job IDs.');
         const statuses:Record<string,any>={};
-        for(const id of p.ids){const item=history[id];if(item){const failed=item.status?.status_str==='error';const error=item.status?.messages?.find((m:any)=>m[0]==='execution_error')?.[1];statuses[id]={state:failed?'error':item.status?.completed?'complete':'running',files:videoFiles(item),error:error?.exception_message||null};}else{const running=queue.queue_running?.some((q:any)=>q[1]===id);const idx=queue.queue_pending?.findIndex((q:any)=>q[1]===id)??-1;statuses[id]={state:running?'running':idx>=0?'queued':'unknown',position:idx+1};}}
+        for(const id of p.ids){const item=history[id];if(item){const failed=item.status?.status_str==='error';const error=item.status?.messages?.find((m:any)=>m[0]==='execution_error')?.[1];statuses[id]={state:failed?'error':item.status?.completed?'complete':'running',files:videoFiles(item),...historyTiming(item),error:error?.exception_message||null};}else{const running=queue.queue_running?.some((q:any)=>q[1]===id);const idx=queue.queue_pending?.findIndex((q:any)=>q[1]===id)??-1;statuses[id]={state:running?'running':idx>=0?'queued':'unknown',position:idx+1};}}
         return Response.json({statuses});
       }
       if(typeof p.batch_id!=='string'||!/^[a-zA-Z0-9-]+$/.test(p.batch_id))throw new Error('Invalid batch ID.');
@@ -56,7 +56,7 @@ export default async function comfy(req: Request) {
     if (p.action === 'status') {
       if (typeof p.id !== 'string' || !/^[a-zA-Z0-9-]+$/.test(p.id)) throw new Error('Invalid job ID.');
       const history = await jsonUp(base,'/history/'+p.id); const item = history[p.id];
-      if (item) { const error = item.status?.messages?.find((m:any)=>m[0]==='execution_error')?.[1]; return Response.json({state:item.status?.status_str==='error' ? 'error' : item.status?.completed ? 'complete' : 'running',files:videoFiles(item),error:error?.exception_message || (item.status?.status_str==='error' ? 'Generation failed. Open ComfyUI to inspect this job.' : null)}); }
+      if (item) { const error = item.status?.messages?.find((m:any)=>m[0]==='execution_error')?.[1]; return Response.json({state:item.status?.status_str==='error' ? 'error' : item.status?.completed ? 'complete' : 'running',files:videoFiles(item),...historyTiming(item),error:error?.exception_message || (item.status?.status_str==='error' ? 'Generation failed. Open ComfyUI to inspect this job.' : null)}); }
       const q = await jsonUp(base,'/queue'); const running = q.queue_running?.some((x:any)=>x[1]===p.id); const index = q.queue_pending?.findIndex((x:any)=>x[1]===p.id) ?? -1;
       return Response.json({state:running?'running':index>=0?'queued':'unknown',position:index+1});
     }

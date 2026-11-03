@@ -87,6 +87,13 @@ export function makeWorkflow(p: any) {
   visit('92'); for(const id of Object.keys(graph)) if(!keep.has(id)) delete graph[id];
   return graph;
 }
+export function historyTiming(item:any){
+ const messages=Array.isArray(item?.status?.messages)?item.status.messages:[];
+ const timestamp=(value:any)=>typeof value==='number'&&Number.isFinite(value)&&value>0?(value<100000000000?value*1000:value):undefined;
+ const startedAt=timestamp(messages.find((m:any)=>Array.isArray(m)&&m[0]==='execution_start')?.[1]?.timestamp);
+ const completedAt=timestamp(messages.find((m:any)=>Array.isArray(m)&&['execution_success','execution_error','execution_interrupted'].includes(m[0]))?.[1]?.timestamp);
+ return {...(startedAt?{startedAt}:{}),...(startedAt&&completedAt&&completedAt>=startedAt?{completedAt,elapsedSeconds:(completedAt-startedAt)/1000}:{})};
+}
 export function videoFiles(item: any) {
   const results: any[] = [];
   for (const out of Object.values(item?.outputs || {}) as any[]) for (const list of Object.values(out)) if (Array.isArray(list)) for (const f of list) {
