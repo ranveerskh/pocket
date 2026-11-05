@@ -254,3 +254,20 @@ Pod review produces a signed, 15-minute receipt bound to the precise path, file 
 Successful Pod removals set per-file tombstones in the gallery so the automatic device copier does not immediately refetch deleted outputs. Partial failures preserve device copies and leave failed items selected. A user-triggered Find can reconnect restored files and clear those flags. Shared Pod storage is shared: deleting a Pod original affects all users of that file, regardless of their independent device galleries.
 
 Validation covers all three destinations, failure/partial-failure preservation, multi-file atomic relinking, per-file tombstones, device/Pod hash mismatch rejection, output path restrictions, wrong keys, confirmation enforcement, cross-site rejection, signed receipt expiry/tampering, symlink/path-swap protection, and actual HTTP helper routes against temporary test files. Existing GPU workflows, ZIP import/export, encryption and gallery tests still pass. No actual user Pod files were deleted and no paid generation job was submitted. Live Pod deletion remains dependent on installing the helper on the user's running ComfyUI instance.
+
+
+## Version 9: Qwen Image 2.1, separate generation views, local timing
+
+Single and Bulk are separate navigation views. Choose MiniMax H3 T2V, MiniMax H3 R2V, Z-Image Turbo, or Qwen Image 2.1 in either view. The manual workflow-import UI is removed; older gallery media and saved records remain usable.
+
+Qwen uses the uploaded direct text-to-image graph, its 25-step Euler/simple sampler, QwenImage21Cache, and these model files:
+
+- `qwen_image_2.1_int8_convrot.safetensors`
+- `qwen3vl_8b_int8_convrot.safetensors`
+- `qwen_image_2.1_vae_bf16.safetensors`
+
+The unused prompt-enhancement branch and saved example prompts are excluded. Positive and negative prompts connect directly to TextEncodeQwenImage21. The optional negative prompt applies to every item in a Qwen batch. Entering one raises CFG from 1 to 3; Advanced settings lets the user adjust guidance. CFG 1 with a nonempty negative prompt is rejected because the negative conditioning would not affect normal CFG sampling. Reuse and project ZIPs preserve the negative prompt and guidance.
+
+Timing uses only the latest five valid completed samples for each matching workflow/duration/size/frame/reference/GPU/guidance combination. The progress estimate uses their average. Queue wait stays separate from generation. A compact, bounded `pocket-timing-v1` localStorage cache survives page reload and deletion of normal gallery records; it contains timing metadata only. Hidden items are excluded. Older queue-inclusive totals are not used. Old media is never deleted when timing samples are pruned.
+
+Validation includes Qwen graph dimensions, seed/negative/CFG mapping, required model checks, single and bulk submissions against mocked ComfyUI, ZIP parameter roundtrips, latest-five limits, localStorage reload, and existing gallery/storage tests. A real GPU render still requires the user's running RunPod and the listed model files.

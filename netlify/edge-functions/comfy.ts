@@ -28,7 +28,7 @@ export default async function comfy(req: Request) {
       const needed = Object.values(graph).flatMap((node:any) => ['UNETLoader','CLIPLoader','VAELoader'].includes(node.class_type) ? Object.entries(node.inputs).filter(([key])=>['unet_name','clip_name','vae_name'].includes(key)).map(([key,name])=>[node.class_type,key,name]) : []);
       const missingModels = needed.filter(([type,key,name]) => { const info = checked.find(x=>x.type===type)?.info; const options = info?.input?.required?.[key]?.[0]; return Array.isArray(options) && !options.includes(name); }).map(x=>x[2]);
       if(missingModels.length) throw new Error('Missing model files: '+missingModels.join(', '));
-      const loraInfo = p.custom || p.mode === 'image' ? {} : await jsonUp(base,'/object_info/LoraLoaderModelOnly');
+      const loraInfo = p.custom || ['image','qwen'].includes(p.mode) ? {} : await jsonUp(base,'/object_info/LoraLoaderModelOnly');
       const lora = loraInfo.LoraLoaderModelOnly?.input?.required?.lora_name?.[0] || [];
       return Response.json({connected:true,device:stats.devices?.[0]?.name || 'RunPod GPU',turboReady:lora.includes(p.mode==='r2v'?'minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors':'minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors')});
     }

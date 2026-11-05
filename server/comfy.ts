@@ -1,5 +1,6 @@
 import template from './workflow.ts';
 import imageTemplate from './image-workflow.ts';
+import qwenTemplate from './qwen-workflow.ts';
 import r2vTemplate from './r2v-workflow.ts';
 export function runpodURL(value: string) {
   let u: URL;
@@ -38,6 +39,18 @@ export function makeWorkflow(p: any) {
     const [width,height]=dimensions(p.quality,p.aspect); put(map.width,width); put(map.height,height);
     if(map.duration) { if(![4,5,6,8,10].includes(Number(p.duration))) throw new Error('Choose a supported duration.'); put(map.duration,Number(p.duration)); }
     if(p.image) { if(!map.image) throw new Error('This workflow has no reference image mapping.'); if(typeof p.image!=='string'||p.image.includes('..')||p.image.startsWith('/')) throw new Error('Invalid reference image.'); put(map.image,p.image); }
+    return graph;
+  }
+  if (p.mode === 'qwen') {
+    if(!Number.isSafeInteger(p.seed)||p.seed<0)throw new Error('Seed must be a positive whole number.');
+    if(p.negativePrompt!==undefined&&(typeof p.negativePrompt!=='string'||p.negativePrompt.length>10000))throw new Error('Negative prompt must be under 10,000 characters.');
+    const negative=(p.negativePrompt||'').trim(),guidance=p.guidance??(negative?3:1);
+    if(typeof guidance!=='number'||!Number.isFinite(guidance)||guidance<1||guidance>10)throw new Error('Qwen guidance must be between 1 and 10.');
+    if(negative&&guidance===1)throw new Error('Set Qwen guidance above 1 to use the negative prompt.');
+    const graph:any=structuredClone(qwenTemplate),[width,height]=dimensions(p.quality,p.aspect);
+    graph['459:452'].inputs.prompt=p.prompt.trim();graph['459:452'].inputs.negative_prompt=negative;
+    graph['459:456'].inputs.width=width;graph['459:456'].inputs.height=height;
+    graph['459:458'].inputs.seed=p.seed;graph['459:458'].inputs.cfg=guidance;
     return graph;
   }
   if (p.mode === 'r2v') {
