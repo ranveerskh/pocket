@@ -11,7 +11,7 @@ function chime(context:AudioContext){
   oscillator.connect(gain);gain.connect(context.destination);oscillator.start(start);oscillator.stop(start+.24);
  }
 }
-export default function CompletionAlerts({jobs,loaded,locked,onOpen}:{jobs:Job[];loaded:boolean;locked:boolean;onOpen:()=>void}){
+export default function CompletionAlerts({jobs,loaded,locked,onOpen,showPreferences=true}:{showPreferences?:boolean;jobs:Job[];loaded:boolean;locked:boolean;onOpen:()=>void}){
  const previous=useRef<Map<string,string>|null>(null),audio=useRef<AudioContext|null>(null),sound=useRef(false);
  const [enabled,setEnabled]=useState(()=>{try{return alertsEnabled(localStorage.getItem('pocket-completion-alerts'));}catch{return true;}});
  const [soundOn,setSoundOn]=useState(false),[count,setCount]=useState(0),[error,setError]=useState('');
@@ -36,11 +36,11 @@ export default function CompletionAlerts({jobs,loaded,locked,onOpen}:{jobs:Job[]
   }catch(e){setError((e as Error).message);}
  }
  return <>
-  <section className="completion-preferences" aria-label="Completion alerts">
-   <div><strong><Bell size={15}/>Completion alerts</strong><p>Alerts work while this app is open. Notifications On/Off is remembered in this browser. Sound needs enabling each time you reopen. Keep the app in front for sound; iPhone silent mode and volume may affect it.</p></div>
+  {showPreferences&&<section className="completion-preferences settings-alerts panel" aria-label="Notifications">
+   <div><strong><Bell size={15}/>Notifications</strong><p>Completion alerts work while Pocket Studio is open. Enable sound each time you reopen the app.</p></div>
    <div className="completion-buttons"><button className="button secondary" aria-pressed={enabled} onClick={toggleAlerts}><Bell size={16}/>Notifications {enabled?'on':'off'}</button><button className="button secondary" disabled={!enabled} aria-pressed={soundOn} onClick={toggleSound}>{soundOn?<Volume2 size={16}/>:<VolumeX size={16}/>}Sound {soundOn?'on':'off'}</button></div>
    {error&&<p className="error" role="alert">{error}</p>}
-  </section>
+  </section>}
   {enabled&&count>0&&!locked&&<aside className="completion-toast" role="status" aria-live="polite" aria-atomic="true"><span className="completion-check"><Check size={20}/></span><div><strong>{count===1?'Generation complete':count+' generations complete'}</strong><p>Your creations are ready in the gallery.</p><button className="text-button" onClick={()=>{setCount(0);onOpen();}}>Open gallery</button></div><button className="icon-button" aria-label="Dismiss completion alert" onClick={()=>setCount(0)}><X size={19}/></button></aside>}
  </>;
 }
