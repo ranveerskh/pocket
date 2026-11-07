@@ -70,7 +70,7 @@ export function makeWorkflow(p: any) {
     cond.prompt=p.prompt.trim();cond.width=width;cond.height=height;cond.length=Math.max(101,Math.ceil((Number(p.duration)*24-5)/17)*17+5);
     graph['129'].inputs.noise_seed=p.seed;
     const model=p.turbo===true?'145':'127';graph['126'].inputs.model=[model,0];graph['124'].inputs.model=[model,0];graph['124'].inputs.steps=p.turbo===true?4:20;
-    graph['124'].inputs.scheduler='normal';graph['92'].inputs.filename_prefix='video/PocketStudio_R2V';
+    graph['124'].inputs.scheduler='simple';graph['92'].inputs.filename_prefix='video/PocketStudio_R2V';
     const keep=new Set<string>();function visit(id:string){if(keep.has(id))return;keep.add(id);for(const v of Object.values(graph[id].inputs))if(Array.isArray(v)&&typeof v[0]==='string'&&graph[v[0]])visit(v[0]);}
     visit('92');for(const id of Object.keys(graph))if(!keep.has(id))delete graph[id];return graph;
   }

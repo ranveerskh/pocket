@@ -271,3 +271,10 @@ The unused prompt-enhancement branch and saved example prompts are excluded. Pos
 Timing uses only the latest five valid completed samples for each matching workflow/duration/size/frame/reference/GPU/guidance combination. The progress estimate uses their average. Queue wait stays separate from generation. A compact, bounded `pocket-timing-v1` localStorage cache survives page reload and deletion of normal gallery records; it contains timing metadata only. Hidden items are excluded. Older queue-inclusive totals are not used. Old media is never deleted when timing samples are pruned.
 
 Validation includes Qwen graph dimensions, seed/negative/CFG mapping, required model checks, single and bulk submissions against mocked ComfyUI, ZIP parameter roundtrips, latest-five limits, localStorage reload, and existing gallery/storage tests. A real GPU render still requires the user's running RunPod and the listed model files.
+
+
+## Version 9.0.1: R2V workflow alignment
+
+R2V Single and Bulk now use `minimax_h3_video_vae_fp16.safetensors` for both reference conditioning and video decoding and preserve the supplied API export's `simple` scheduler. Audio continues to use `minimax_h3_audio_vae_fp32.safetensors`. The base path remains `res_multistep`, 20 steps, 24 fps; the existing optional Turbo mode remains 4 steps with its R2V LoRA. Legacy CreateVideo/SaveVideo inputs absent from the supplied export were removed.
+
+Connect checks now require the FP16 video VAE for R2V. Keep the INT8 VAE if using Text-to-Video, whose workflow is unchanged. Refresh the app after deployment and check the connection again before rendering. Workflow/route regression checks cover all 90 R2V setting combinations; no paid GPU job is started by the tests. This aligns settings and does not establish the cause of a particular bad video or distorted audio.

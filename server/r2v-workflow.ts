@@ -3,7 +3,6 @@ export default {
     "inputs": {
       "filename_prefix": "video/MiniMax_H3",
       "format": "auto",
-      "format.codec": "auto",
       "codec": "auto",
       "video": [
         "130",
@@ -32,7 +31,7 @@ export default {
   },
   "119": {
     "inputs": {
-      "vae_name": "minimax_h3_video_vae_int8_convrot.safetensors"
+      "vae_name": "minimax_h3_video_vae_fp16.safetensors"
     },
     "class_type": "VAELoader",
     "_meta": {
@@ -207,8 +206,6 @@ export default {
     "inputs": {
       "fps": 24,
       "bit_depth": 8,
-      "color_space": "sRGB",
-      "codec": "none",
       "images": [
         "122",
         0

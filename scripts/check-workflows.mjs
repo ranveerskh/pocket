@@ -56,6 +56,17 @@ console.log('Completion alerts: single/bulk transitions, repeat suppression, pri
 const refs={images:[{name:'Adam',path:'adam.png'},{name:'Leah',path:'leah.png'}],audios:[{name:'Adam',path:'adam.wav',seconds:4},{name:'Leah',path:'leah.m4a',seconds:5}]};
 for(const duration of [4,5,6,8,10])for(const quality of ['draft','balanced','high'])for(const aspect of ['landscape','portrait','square'])for(const turbo of [false,true]){
  const g=c.makeWorkflow({mode:'r2v',prompt:'New scene',seed:321,duration,quality,aspect,turbo,references:refs});
+ // R2V baseline from the supplied ComfyUI API export: both encode/decode use FP16,
+ // audio keeps its own FP32 VAE, and the simple schedule must survive runtime mapping.
+ assert.equal(g['119'].inputs.vae_name,'minimax_h3_video_vae_fp16.safetensors');
+ assert.equal(g['124'].inputs.scheduler,'simple');
+ assert.equal(g['123'].inputs.sampler_name,'res_multistep');
+ assert.equal(g['120'].inputs.vae_name,'minimax_h3_audio_vae_fp32.safetensors');
+ assert.deepEqual([...g['136'].inputs.vae],['119',0]);
+ assert.deepEqual([...g['122'].inputs.vae],['119',0]);
+ assert.deepEqual([...g['121'].inputs.vae],['120',0]);
+ assert.deepEqual([...g['130'].inputs.audio],['121',0]);
+ assert.equal(g['130'].inputs.fps,24);
  assert.equal(g['136'].inputs.prompt,'New scene');assert.equal(g['136'].inputs.width%32,0);assert.equal(g['136'].inputs.length%17,5);assert.ok(g['136'].inputs.length/24>=duration);assert.equal(g['124'].inputs.steps,turbo?4:20);assert.equal(g['124'].inputs.model[0],turbo?'145':'127');assert.equal(!!g['145'],turbo);assert.equal(g['136'].inputs['ref_audios.ref_audio_0'][0],'pocket-ref-audio-0');assert.equal(g['pocket-ref-audio-1'].inputs.audio,'leah.m4a');assert.equal(g['pocket-ref-image-1'].inputs.image,'leah.png');assert.ok(!g['137']&&!g['138']&&!g['139']&&!g['141']);assert.equal(g['129'].inputs.noise_seed,321);
  for(const node of Object.values(g))for(const value of Object.values(node.inputs))if(Array.isArray(value)&&typeof value[0]==='string')assert.ok(g[value[0]],value[0]);
 }
@@ -67,8 +78,8 @@ assert.throws(()=>c.makeWorkflow({...r2p,references:{audios:[{path:'a.wav',secon
 const voiceOnly=c.makeWorkflow({...r2p,references:{audios:refs.audios}});assert.ok(!Object.keys(voiceOnly['136'].inputs).some(k=>k.startsWith('ref_images.')));
 const photoOnly=c.makeWorkflow({...r2p,references:{images:refs.images}});assert.ok(!Object.keys(photoOnly['136'].inputs).some(k=>k.startsWith('ref_audios.')));
 r=await post({action:'connect',mode:'r2v'});assert.equal(r.status,200);assert.equal((await r.json()).turboReady,true);
-r=await post({...r2p,action:'generate',references:refs});assert.equal(r.status,200);assert.equal(lastGraph['pocket-ref-audio-0'].class_type,'LoadAudio');
-failAt=-1;r=await post({...r2p,action:'bulk',batch_id:'r2v-batch',references:refs,items:[{index:0,prompt:'Scene one',seed:1},{index:1,prompt:'Scene two',seed:2}]});assert.equal((await r.json()).items.length,2);assert.equal(lastGraph['136'].inputs.prompt,'Scene two');assert.equal(lastGraph['pocket-ref-audio-0'].inputs.audio,'adam.wav');
+r=await post({...r2p,action:'generate',references:refs});assert.equal(r.status,200);assert.equal(lastGraph['pocket-ref-audio-0'].class_type,'LoadAudio');assert.equal(lastGraph['119'].inputs.vae_name,'minimax_h3_video_vae_fp16.safetensors');assert.equal(lastGraph['124'].inputs.scheduler,'simple');
+failAt=-1;r=await post({...r2p,action:'bulk',batch_id:'r2v-batch',references:refs,items:[{index:0,prompt:'Scene one',seed:1},{index:1,prompt:'Scene two',seed:2}]});assert.equal((await r.json()).items.length,2);assert.equal(lastGraph['136'].inputs.prompt,'Scene two');assert.equal(lastGraph['pocket-ref-audio-0'].inputs.audio,'adam.wav');assert.equal(lastGraph['119'].inputs.vae_name,'minimax_h3_video_vae_fp16.safetensors');assert.equal(lastGraph['124'].inputs.scheduler,'simple');
 for(const kind of ['image','audio']){const form=new FormData();form.set('base',base);form.set('kind',kind);form.set(kind,new File(['sample'],kind==='image'?'photo.png':'voice.m4a',{type:kind==='image'?'image/png':'audio/mp4'}));r=await route.default(new Request('https://studio.test/api/comfy',{method:'POST',body:form}));assert.equal(r.status,200);assert.match((await r.json()).name,kind==='image'?/\.png$/:/\.m4a$/);}
 const invalidUpload=new FormData();invalidUpload.set('base',base);invalidUpload.set('kind','audio');invalidUpload.set('audio',new File(['x'],'bad.exe',{type:'application/octet-stream'}));r=await route.default(new Request('https://studio.test/api/comfy',{method:'POST',body:invalidUpload}));assert.equal(r.status,400);
 const rm=compile('src/reference-model.ts');const characters=[{id:'adam',base,name:'Adam',image:'adam.png'},{id:'leah',base,name:'Leah',image:'leah.png',audio:'leah.wav',audioSeconds:4}];const selected=rm.characterReferences(characters,['adam','leah'],base);assert.equal(selected.images.length,2);assert.equal(selected.audios.length,1);const tagged=rm.referencePrompt('Leah speaks.',selected);assert.ok(tagged.includes('"Leah": follow the voice timbre of <Audio 1>'));assert.throws(()=>rm.characterReferences(characters,['adam'],'other-pod'),/connection/);assert.equal(rm.characterReferences(characters,[],base).images.length,0);
