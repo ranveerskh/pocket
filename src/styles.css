@@ -320,3 +320,8 @@
 @media (max-width: 650px) {
   .compact-projects .projects-grid { grid-template-columns: repeat(var(--project-phone-columns, 2), minmax(0, 1fr)); }
 }
+
+.device-sync-settings { margin-top: 12px; }
+.device-sync-settings .device-sync-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.device-sync-settings p { color: var(--muted); }
+.device-sync-settings label { display: grid; gap: 6px; margin-top: 14px; }

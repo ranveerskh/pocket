@@ -25,8 +25,22 @@ export function useGalleryStore(){
  async function setPin(pin:string,lockAfter=false){if(!crypto.subtle)throw new Error('Hidden lock requires HTTPS.');if(!/^\d{6,12}$/.test(pin))throw new Error('Use a PIN with 6–12 digits.');if(locked)throw new Error('Unlock hidden items first.');if(!mediaSecret.current){mediaSecret.current=bytes(crypto.getRandomValues(new Uint8Array(32)));mediaCrypto.current=await crypto.subtle.importKey('raw',unbytes(mediaSecret.current),'AES-GCM',false,['encrypt','decrypt']);}const salt=bytes(crypto.getRandomValues(new Uint8Array(16))),key=await deriveKey(pin,unbytes(salt));revision.current++;const data={jobs,folders,characters,characterIds};const sealed=await sealLibrary(partitionLibrary({...data,mediaSecret:mediaSecret.current}).hiddenData,key,salt);localStorage.setItem('pocket-hidden-vault',JSON.stringify(sealed));savePublic(data);secret.current={key,salt};setProtectedGallery(true);if(lockAfter){secret.current=null;mediaSecret.current=undefined;mediaCrypto.current=null;setJobs(prev=>prev.filter(j=>!j.hidden));setLocked(true);}}
  async function lock(){if(!secret.current||!protectedGallery)return;revision.current++;const e=await sealLibrary(partitionLibrary({jobs,folders,characters,characterIds,mediaSecret:mediaSecret.current}).hiddenData,secret.current.key,secret.current.salt);localStorage.setItem('pocket-hidden-vault',JSON.stringify(e));secret.current=null;mediaSecret.current=undefined;mediaCrypto.current=null;setJobs(prev=>prev.filter(j=>!j.hidden));setLocked(true);}
  async function verifyPin(pin:string){const envelope=JSON.parse(localStorage.getItem('pocket-hidden-vault')||'null') as Envelope;if(!envelope)throw new Error('Set a hidden-folder PIN first.');try{const key=await deriveKey(pin,unbytes(envelope.salt));await openLibrary(envelope,key);}catch{throw new Error('Incorrect PIN.');}}
- function addProject(folder:Folder,items:Job[]){const next={jobs:[...items,...jobs],folders:[...folders,folder],characters,characterIds};const keys=['pocket-jobs','pocket-folders','pocket-characters','pocket-character-ids'];const before=keys.map(k=>localStorage.getItem(k));try{savePublic(next,protectedGallery);}catch(e){keys.forEach((k,i)=>{try{if(before[i]===null)localStorage.removeItem(k);else localStorage.setItem(k,before[i]!);}catch{}});throw e;}setJobs(next.jobs);setFolders(next.folders);}
+ function saveProjectChanges(next:Library){
+  const keys=['pocket-jobs','pocket-folders','pocket-characters','pocket-character-ids'];
+  const before=keys.map(key=>localStorage.getItem(key));
+  try{savePublic(next,protectedGallery);}
+  catch(error){
+   keys.forEach((key,index)=>{try{if(before[index]===null)localStorage.removeItem(key);else localStorage.setItem(key,before[index]!);}catch{}});
+   throw error;
+  }
+  setJobs(next.jobs);
+  setFolders(next.folders);
+  setCharacters(next.characters||[]);
+ }
+ function addProject(folder:Folder,items:Job[]){
+  saveProjectChanges({jobs:[...items,...jobs],folders:[...folders,folder],characters,characterIds});
+ }
  function getMediaKey(){return mediaCrypto.current;}
  function removePin(){throw new Error('Hidden items always require a PIN. You can change it here.');}
- return{getMediaKey,addProject,jobs,setJobs,characters,setCharacters,characterIds,setCharacterIds,folders,setFolders,protectedGallery,locked,legacyLocked,loaded,storageError,unlock,setPin,lock,removePin,verifyPin};
+ return{getMediaKey,addProject,saveProjectChanges,jobs,setJobs,characters,setCharacters,characterIds,setCharacterIds,folders,setFolders,protectedGallery,locked,legacyLocked,loaded,storageError,unlock,setPin,lock,removePin,verifyPin};
 }
