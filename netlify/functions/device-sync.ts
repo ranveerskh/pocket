@@ -34,23 +34,23 @@ export default async function sync(request: Request) {
   try {
     const store = getStore({name: 'pocket-device-sync-v1', consistency: 'strong'});
     if (request.method === 'GET') {
-      const tag = request.headers.get('if-none-match') || undefined;
+      const tag = request.headers.get('x-pocket-sync-known') || undefined;
       const data = await store.getWithMetadata(token, {etag: tag, type: 'text'});
       if (!data) return reply(404, 'Pairing space not found.');
       if (data.data === null) return new Response(null, {status: 304, headers});
       if (!data.etag) return reply(503, 'Sync revision unavailable.');
-      return new Response(data.data, {headers: {...headers, 'Content-Type': 'text/plain', ETag: data.etag}});
+      return new Response(data.data, {headers: {...headers, 'Content-Type': 'text/plain', 'X-Pocket-Sync-Revision': data.etag}});
     }
     if (request.method !== 'PUT') return reply(405, 'Method unavailable.');
-    const match = request.headers.get('if-match');
-    const create = request.headers.get('if-none-match') === '*';
+    const match = request.headers.get('x-pocket-sync-match');
+    const create = request.headers.get('x-pocket-sync-create') === '*';
     if ((!match && !create) || (match && create) || match === '*') return reply(428, 'A sync revision is required.');
     const body = await readBounded(request);
     if (body === null) return reply(413, 'This project library is too large to sync.');
     if (!/^1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{22,}$/.test(body)) return reply(400, 'Invalid encrypted sync data.');
     const result = await store.set(token, body, match ? {onlyIfMatch: match} : {onlyIfNew: true});
     if (!result.modified || !result.etag) return reply(412, 'The other device just synced. Retrying…');
-    return new Response(null, {status: 204, headers: {...headers, ETag: result.etag}});
+    return new Response(null, {status: 204, headers: {...headers, 'X-Pocket-Sync-Revision': result.etag}});
   } catch {
     return reply(503, 'Device sync storage is temporarily unavailable.');
   }

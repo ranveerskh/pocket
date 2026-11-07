@@ -46,7 +46,7 @@ export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>) {
       for (let attempt = 0; attempt < 3; attempt++) {
         const prior = cache.current?.code === request.code ? cache.current : undefined;
         const headers: Record<string, string> = {Authorization: authorization};
-        if (prior) headers['If-None-Match'] = prior.etag;
+        if (prior) headers['X-Pocket-Sync-Known'] = prior.etag;
         const response = await fetch(API, {headers, signal: AbortSignal.timeout(20_000)});
         let snapshot = EMPTY;
         let etag: string | null = null;
@@ -54,7 +54,7 @@ export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>) {
           snapshot = prior.snapshot;
           etag = prior.etag;
         } else if (response.ok) {
-          etag = response.headers.get('etag');
+          etag = response.headers.get('X-Pocket-Sync-Revision');
           if (!etag) throw new Error('The sync server did not return a revision.');
           snapshot = await openSnapshot(await response.text(), key);
         } else if (response.status === 404) {
@@ -70,15 +70,15 @@ export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>) {
           const body = await sealSnapshot(merged.snapshot, key);
           if (body.length > 2_000_000) throw new Error('This library is too large for device sync.');
           const writeHeaders: Record<string, string> = {Authorization: authorization, 'Content-Type': 'text/plain'};
-          if (etag) writeHeaders['If-Match'] = etag;
-          else writeHeaders['If-None-Match'] = '*';
+          if (etag) writeHeaders['X-Pocket-Sync-Match'] = etag;
+          else writeHeaders['X-Pocket-Sync-Create'] = '*';
           const written = await fetch(API, {method: 'PUT', headers: writeHeaders, body, signal: AbortSignal.timeout(20_000)});
           if (written.status === 412) {
             cache.current = undefined;
             continue;
           }
           if (!written.ok) throw new Error('Could not save project changes to device sync.');
-          etag = written.headers.get('etag');
+          etag = written.headers.get('X-Pocket-Sync-Revision');
           snapshot = merged.snapshot;
         }
 
