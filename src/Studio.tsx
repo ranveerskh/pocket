@@ -35,6 +35,21 @@ export default function Studio(){
  const vault=useGalleryStore();const localMedia=useDeviceLibrary(vault);const {jobs,setJobs}=vault;
  const folderExport=useFolderExport(vault,localMedia);
  const [mediaProject,setMediaProject]=useState('');
+ const [projectColumns,setProjectColumns]=useState(()=>{
+  try{
+   const saved=JSON.parse(localStorage.getItem('pocket-project-columns')||'{}');
+   return {
+    phone:[1,2,3].includes(saved.phone)?Number(saved.phone):2,
+    laptop:[2,3,4].includes(saved.laptop)?Number(saved.laptop):0,
+   };
+  }catch{return {phone:2,laptop:0};}
+ });
+ function changeProjectColumns(screen:'phone'|'laptop',value:number){
+  const next={...projectColumns,[screen]:value};
+  setProjectColumns(next);
+  try{localStorage.setItem('pocket-project-columns',JSON.stringify(next));}
+  catch{setMessage('This browser could not remember the grid setting.');}
+ }
  const [standaloneBulk,setStandaloneBulk]=useState(false);
  const [bulkDraft,setBulkDraft]=useState('');
  const [bulkFormat,setBulkFormat]=useState<BulkFormat>('auto');
@@ -117,7 +132,7 @@ export default function Studio(){
  </details>{message&&<div className="error" role="alert"><AlertCircle size={17}/><span>{message}</span></div>}<button hidden={isBulk} className="generate" onClick={generate} disabled={busy||refBusy||checking||!!active||!vault.loaded||bulkState.adding}>{busy?<LoaderCircle className="spin" size={19}/>:<Sparkles size={19}/>} {busy?(file?'Uploading & submitting…':'Submitting…'):active?'Generation in progress':isImage?'Generate image':'Generate video'}<ArrowUpRight size={19}/></button><p className="cost-note">{vault.legacyLocked?'Gallery is locked. Unlock it before creating. ' : ''}Uses your RunPod GPU. No generation starts until you tap.</p></section>
  <details className="workspace-settings"><summary>Generation timing</summary> <Timing jobs={jobs} current={job} elapsed={elapsed} candidate={{id:'timing-current',guidance:isQwen?guidance:undefined,mode:isImage?'image':'video',workflowId,base,prompt,created:Date.now(),state:'draft',duration,seed:0,quality,aspect,device:device||base,turbo:!isImage&&turbo,referenceUsed:isR2V?activeCharacterIds.length>0:!!file,referenceProfile:refProfile,durationMapped:true}}/></details>
  </>;
- return <DeviceLibraryProvider value={localMedia}><div className={'shell'+(isCreation?' studio-workspace-shell':'')}><header className="topbar"><a href="/" className="brand"><span className="brand-icon"><Clapperboard size={21}/></span><span>pocket<span className="brand-light"> studio</span><small>VERSION 10.1 · STUDIO</small></span></a><button disabled={galleryBusy||lockedForSubmit} className={'status '+(connected?'online':'')} onClick={()=>setTab('settings')}><span className="dot"/>{checking?'Checking…':connected?'RunPod connected':'Connect RunPod'}<ChevronRight size={14}/></button></header>
+ return <DeviceLibraryProvider value={localMedia}><div className={'shell'+(isCreation?' studio-workspace-shell':'')}><header className="topbar"><a href="/" className="brand"><span className="brand-icon"><Clapperboard size={21}/></span><span>pocket<span className="brand-light"> studio</span><small>VERSION 10.1.1 · STUDIO</small></span></a><button disabled={galleryBusy||lockedForSubmit} className={'status '+(connected?'online':'')} onClick={()=>setTab('settings')}><span className="dot"/>{checking?'Checking…':connected?'RunPod connected':'Connect RunPod'}<ChevronRight size={14}/></button></header>
  <nav className="navigation" aria-label="Studio">{nav.map(n=><button key={n.id} disabled={lockedForSubmit||galleryBusy} className={(tab===n.id||n.id==='create'&&isCreation)?'selected':''} onClick={()=>{setPrivateOpen(false);if(n.id==='library')setMediaProject('');setTab(n.id);setMessage('');}}><n.icon size={18}/>{n.label}</button>)}</nav>
  <main>{isCreation&&<ProjectWorkspace
    jobs={jobs}
@@ -179,11 +194,26 @@ export default function Studio(){
    </button>
    {connected&&<p className="settings-connected" role="status"><Check size={16}/> Connected · {device}</p>}
   </section>
+  <section className="panel settings-connection project-grid-settings" aria-label="Projects grid">
+   <h2>Projects grid</h2>
+   <div className="two-cols">
+    <label className="field-label">Phone columns
+     <select value={projectColumns.phone} onChange={e=>changeProjectColumns('phone',Number(e.target.value))}>
+      <option value={1}>1 column</option><option value={2}>2 columns</option><option value={3}>3 columns</option>
+     </select>
+    </label>
+    <label className="field-label">Laptop columns
+     <select value={projectColumns.laptop} onChange={e=>changeProjectColumns('laptop',Number(e.target.value))}>
+      <option value={0}>Automatic</option><option value={2}>2 columns</option><option value={3}>3 columns</option><option value={4}>4 columns</option>
+     </select>
+    </label>
+   </div>
+  </section>
   <h2 className="settings-section-title">Storage</h2>
   <DeviceStorage vault={vault}/>
   <FolderExportSettings service={folderExport}/>
  </section>}
- {(tab==='library'||tab==='private'&&privateOpen)&&<Gallery onBusy={setGalleryBusy} currentBase={base} key={tab+'-'+mediaProject} initialFolder={mediaProject||undefined} privateView={tab==='private'&&privateOpen} onClosePrivate={()=>{setPrivateOpen(false);setTab('library');void vault.lock().catch(e=>setMessage(e.message));}} vault={vault} busy={busy||!!active} onReuse={reuse} onReference={useAsReference} onCreate={openCreate} onOpenProject={mediaProject?undefined:openProject}/>}
+ {(tab==='library'||tab==='private'&&privateOpen)&&<Gallery projectColumns={projectColumns} onBusy={setGalleryBusy} currentBase={base} key={tab+'-'+mediaProject} initialFolder={mediaProject||undefined} privateView={tab==='private'&&privateOpen} onClosePrivate={()=>{setPrivateOpen(false);setTab('library');void vault.lock().catch(e=>setMessage(e.message));}} vault={vault} busy={busy||!!active} onReuse={reuse} onReference={useAsReference} onCreate={openCreate} onOpenProject={mediaProject?undefined:openProject}/>}
 
- </main><CompletionAlerts showPreferences={tab==='settings'} jobs={jobs} loaded={vault.loaded} locked={vault.legacyLocked} onOpen={()=>{setPrivateOpen(false);setTab('library');}}/><footer className="footer"><button className="footer-brand" disabled={refBusy||galleryBusy} onClick={()=>setPrivatePrompt(true)}>POCKET STUDIO · VERSION 10.1</button></footer>{privatePrompt&&<PrivateAccess vault={vault} onClose={()=>setPrivatePrompt(false)} onOpen={()=>{setPrivatePrompt(false);setPrivateOpen(true);setTab('private');}}/>}</div></DeviceLibraryProvider>;
+ </main><CompletionAlerts showPreferences={tab==='settings'} jobs={jobs} loaded={vault.loaded} locked={vault.legacyLocked} onOpen={()=>{setPrivateOpen(false);setTab('library');}}/><footer className="footer"><button className="footer-brand" disabled={refBusy||galleryBusy} onClick={()=>setPrivatePrompt(true)}>POCKET STUDIO · VERSION 10.1.1</button></footer>{privatePrompt&&<PrivateAccess vault={vault} onClose={()=>setPrivatePrompt(false)} onOpen={()=>{setPrivatePrompt(false);setPrivateOpen(true);setTab('private');}}/>}</div></DeviceLibraryProvider>;
 }

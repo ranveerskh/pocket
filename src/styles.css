@@ -311,3 +311,12 @@
   .standalone-create-header .workspace-project-select { flex-basis: 100%; order: 2; }
   .standalone-create-header .workspace-project-select > span { display: inline; }
 }
+
+.project-grid-settings { margin-top: 12px; }
+.project-grid-settings .field-label { display: grid; gap: 6px; }
+.compact-projects .projects-grid {
+  grid-template-columns: var(--project-laptop-columns, repeat(auto-fill, minmax(min(100%, 190px), 1fr)));
+}
+@media (max-width: 650px) {
+  .compact-projects .projects-grid { grid-template-columns: repeat(var(--project-phone-columns, 2), minmax(0, 1fr)); }
+}
