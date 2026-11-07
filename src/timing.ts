@@ -23,6 +23,7 @@ export function mergeJobStatus(job:Job,status:any,now=Date.now()):Job{
  const start=serverStart||job.startedAt||(status.state==='running'?now:undefined);
  if(start){next.startedAt=start;next.timingSource=serverStart?'server':job.timingSource||'observed';next.queueSeconds=Math.max(0,(start-job.created)/1000);}
  if(status.state==='complete'){
+  next.autoCopyPending=Boolean(next.files?.length);
   const end=positive(status.completedAt)?status.completedAt:job.completedAt||now;
   next.completedAt=end;next.totalSeconds=Math.max(0,(end-job.created)/1000);
   if(serverStart&&typeof status.elapsedSeconds==='number'&&Number.isFinite(status.elapsedSeconds)&&status.elapsedSeconds>=0)next.elapsedSeconds=status.elapsedSeconds;

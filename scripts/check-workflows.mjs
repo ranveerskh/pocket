@@ -179,3 +179,8 @@ const hiddenTime={...many[24],hidden:true};assert.equal(timing.mergeTimingSample
 cacheStore.set(timing.TIMING_STORAGE_KEY,'invalid JSON');assert.equal(timing.readTimingSamples(browserStorage).length,0);
 const qwenTiming={...baseTiming,workflowId:'builtin-qwen-image21',mode:'image',guidance:3};assert.notEqual(timing.timingBucket(qwenTiming),timing.timingBucket({...qwenTiming,guidance:1}));
 console.log('Passed 18 Qwen variants, required model files, negative conditioning/CFG, single and bulk API submissions, and latest-five per-setting timing persistence/reload without gallery records.');
+
+// Lettered shots used in project navigation retain both their labels and order.
+const letteredShots = ['05AA','06','05Z','05B','05A','05'].map((code, i) => ({...sample[0], id:'lettered-'+i, prompt:'SCENE '+code+' — Test shot'}));
+assert.deepEqual(Array.from(gm.galleryItems(letteredShots,'all'),job=>gm.creationLabel(job)),['Scene 05','Scene 05A','Scene 05B','Scene 05Z','Scene 05AA','Scene 06']);
+assert.equal(gm.creationDownloadName(letteredShots[0],'video.mp4'),'Scene_05AA_video.mp4');
