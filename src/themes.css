@@ -1,0 +1,38 @@
+.theme-settings{margin-top:12px}
+.theme-choices{display:flex;gap:10px;flex-wrap:wrap}
+.theme-choices .button{flex:1;min-width:90px;min-height:46px}
+.theme-choices [aria-pressed=true]{border-color:var(--accent);color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.theme-settings p{margin:12px 0 0;font-size:12px;line-height:1.7;color:var(--muted)}
+
+:root[data-theme=light]{color-scheme:light;--bg:#f4f3f8;--panel:#fff;--line:#d6d3df;--text:#24202d;--muted:#615b6d;--accent:#6840b4}
+:root[data-theme=light] :is(input,textarea,select){background:#fff;color:var(--text);border-color:#bfbacb}
+:root[data-theme=light] :is(input,textarea)::placeholder{color:#787080}
+:root[data-theme=light] :is(.brand-light,.field-label,.character-form label,.connection-info strong,.reference strong,.reference-loaded strong){color:var(--text)}
+:root[data-theme=light] .brand-icon{color:#fff}
+:root[data-theme=light] :is(.status,.button,.ideas button,.segments button,.mode-switch button,.template-toggles button,.folder-bar button,.gallery-search,.gallery-order select,.character-card,.character-form,.workspace-sidebar,.workspace-composer,.workspace-scene-index button,.workspace-settings>summary,.workspace-filters button,.composer-modes button,.composer-queue,.delete-choices>button,.storage-setup,.delete-review,.batch-action-progress,.batch-action-report){background:#eeebf4;border-color:var(--line);color:var(--text)}
+:root[data-theme=light] :is(.bulk-panel,.editor .bulk-panel,.character-panel,.tip-card,.lightbox,.standalone-result,.download-dialog,.pin-modal){background:var(--panel);border-color:var(--line);color:var(--text)}
+:root[data-theme=light] :is(.text-button,.icon-button,.navigation button,.advanced-toggle,.gallery-filter button,.gallery-layout button,.character-heading,.download,.use-reference,.stop-button){color:#5c427b}
+:root[data-theme=light] :is(.navigation .selected,.navigation button:hover,.segments .chosen,.mode-switch button.active,.template-toggles .enabled,.folder-bar button.selected,.gallery-filter .selected,.gallery-layout button.selected,.character-selected,.reference-tags span,.release-badge,.hidden-banner,.selection-toolbar,.delete-choices>button.chosen,.theme-choices [aria-pressed=true]){background:#e5daf7;border-color:#9779c3;color:#4d2b80}
+:root[data-theme=light] :is(.primary,.generate){background:var(--accent);border-color:var(--accent);color:#fff}
+:root[data-theme=light] :is(.primary,.generate):hover{background:#58309f}
+:root[data-theme=light] :is(.reference,.reference-loaded,.connection-art,.download,.use-reference,.stop-button){background:#eeebf4;border-color:#b3a4c9}
+:root[data-theme=light] .connect-banner{background:linear-gradient(100deg,#e9e1f4,#f3f0f8);border-color:var(--line);color:var(--text)}
+:root[data-theme=light] :is(.bulk-note,.bulk-heading small,.character-heading small,.character-assets,.character-empty,.connection-panel>p,.connection-info,.connection-info p,.tip-card p,.workflow-help,.workflow-current-label,.workflow-selector label,.nav-model,.prompt-footer,.cost-note,.size-note,.size-note span,.field-label span,.reference small,.reference-loaded small,.workspace-shot-body p,.workspace-scene-index span,.project-workspace p,.settings-page p,.gallery-page .sub,.gallery-total,.gallery-order,.timing-footnote,.timing-progress-note,.timing-heading,.timing-breakdown,.private-pin-note,.device-copy-note,.download-instruction,.mobile-note p,.mobile-note p span,.footer,.footer-brand){color:var(--muted)}
+:root[data-theme=light] :is(.count,.folder-bar small){background:#d9d2e5;color:#4c3e5e}
+:root[data-theme=light] :is(.error,.state-error){background:#fff0ed;border-color:#d3a09b;color:#8d3025}
+:root[data-theme=light] .danger{background:#fae6eb;border-color:#d49ca8;color:#982f4b}
+:root[data-theme=light] :is(.settings-connected,.bulk-success,.state-complete){color:#236841}
+:root[data-theme=light] .device-storage{background:#edf6ef;border-color:#b5cdbb;color:#244f33}
+:root[data-theme=light] .completion-toast{background:#eff7ed;border-color:#a9c4a5;color:#264b24}
+:root[data-theme=light] .timing-track{background:#e5dced}
+:root[data-theme=light] .timing-track>span{background:linear-gradient(90deg,#8155bd,#ac83d7)}
+:root[data-theme=light] .screen{background:radial-gradient(ellipse at 50% 45%,#eee6f6,#e2dce9);border-color:#bdb1ce;color:var(--text)}
+:root[data-theme=light] .screen :is(p,.screen-label){color:#6d5e7b}
+:root[data-theme=light] .screen-icon{background:#e1d6ed;border-color:#b8a1d3;color:#6b449d}
+:root[data-theme=light] .new-project-card{background:linear-gradient(130deg,#eee6f7,#f8f6fb);border-color:#b299cc}
+:root[data-theme=light] .project-card{background:var(--panel);border-color:var(--line)}
+:root[data-theme=light] .project-card :is(h2,h3,strong){color:var(--text)}
+:root[data-theme=light] .project-card p{color:var(--muted)}
+:root[data-theme=light] .gallery-tile{border-color:#c8bdd7}
+:root[data-theme=light] .gallery-list .tile-caption{color:var(--text)}
+:root[data-theme=light] .gallery-list .tile-caption :is(p,small){color:var(--muted)}

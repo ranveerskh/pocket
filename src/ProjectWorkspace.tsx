@@ -69,7 +69,7 @@ export default function ProjectWorkspace(p: Props) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState('');
   const [mobileComposer, setMobileComposer] = useState(false);
-  const [sidebar, setSidebar] = useState(true);
+  const [sidebar, setSidebar] = useState(false);
   const [showComposer, setShowComposer] = useState(true);
   const [now, setNow] = useState(Date.now);
   const feed = useRef<HTMLDivElement>(null);
