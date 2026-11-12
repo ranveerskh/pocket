@@ -48,7 +48,7 @@ export default async function comfy(req: Request) {
       if(p.action==='recover_batch')return Response.json({items:[...found].map(([index,id])=>({index,id}))});
       if(!Array.isArray(p.items)||!p.items.length||p.items.length>5)throw new Error('Submit 1–5 prompts per request.');
       if(p.items.some((x:any)=>!Number.isInteger(x.index)||x.index<0||x.index>=50))throw new Error('Invalid batch item index.');
-      const prepared=p.items.map((x:any)=>({index:x.index,graph:makeWorkflow({...p,prompt:x.prompt,seed:x.seed})}));const submitted=[];let partial_error='';
+      const prepared=p.items.map((x:any)=>({index:x.index,graph:makeWorkflow({...p,prompt:x.prompt,seed:x.seed,duration:x.duration??p.duration,references:x.references??p.references})}));const submitted=[];let partial_error='';
       for(const item of prepared){if(found.has(item.index)){submitted.push({index:item.index,id:found.get(item.index)});continue;}try{const result=await jsonUp(base,'/prompt',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:item.graph,client_id:p.batch_id,extra_data:{pocket_batch_id:p.batch_id,pocket_item_index:item.index}})});submitted.push({index:item.index,id:result.prompt_id});}catch(e){partial_error=(e as Error).message;break;}}
       return Response.json({items:submitted,partial_error});
     }

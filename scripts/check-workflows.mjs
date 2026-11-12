@@ -184,3 +184,60 @@ console.log('Passed 18 Qwen variants, required model files, negative conditionin
 const letteredShots = ['05AA','06','05Z','05B','05A','05'].map((code, i) => ({...sample[0], id:'lettered-'+i, prompt:'SCENE '+code+' — Test shot'}));
 assert.deepEqual(Array.from(gm.galleryItems(letteredShots,'all'),job=>gm.creationLabel(job)),['Scene 05','Scene 05A','Scene 05B','Scene 05Z','Scene 05AA','Scene 06']);
 assert.equal(gm.creationDownloadName(letteredShots[0],'video.mp4'),'Scene_05AA_video.mp4');
+
+// A film can retain nine cast entries while each queued shot uses its own three-reference subset.
+const shotPlanner=compile('src/shot-plan.ts',{comfy:rm});
+const castNames=['Martha Young','Martha Present','Rose Young','Rose Present','Ethan Child','Ethan Adult','David Young','David Present','Doctor'];
+const cast=castNames.map((name,index)=>({id:'cast-'+index,name,base,image:'cast-'+index+'.png'}));
+const shotOptions={mode:'r2v',duration:5,base,characters:cast,selectedIds:['cast-0']};
+const shotTexts=Array.from({length:50},(_,index)=>'SCENE '+(index+1)+'\nDURATION: '+[5,6,8,10][index%4]+'s\nCHARACTERS: '+castNames[index%9]+' | '+castNames[(index+1)%9]+'\nA quiet conversation at the door.');
+const shotPlans=shotPlanner.planShots(shotTexts,shotOptions);
+assert.equal(shotPlans.length,50);
+for(let index=0;index<50;index++){
+ const plan=shotPlans[index];
+ assert.equal(plan.duration,[5,6,8,10][index%4]);
+ assert.equal(plan.references.images[0].path,'cast-'+(index%9)+'.png');
+ assert.equal(plan.references.images[1].path,'cast-'+((index+1)%9)+'.png');
+ assert.equal(plan.characterIds.length,2);
+ assert.ok(!plan.prompt.includes('CHARACTERS:'));
+}
+assert.throws(()=>shotPlanner.planShots([shotTexts[0],shotTexts[1].replace('6s','7s')],shotOptions),/Prompt 2.*durations/);
+assert.throws(()=>shotPlanner.planShot('DURATION: 6.8s\nA shot',shotOptions),/durations/);
+assert.throws(()=>shotPlanner.planShot('DURATION: ten seconds\nA shot',shotOptions),/DURATION/);
+assert.throws(()=>shotPlanner.planShot('DURATION: 5s\nDURATION: 10s\nA shot',shotOptions),/one DURATION/);
+assert.throws(()=>shotPlanner.planShot('SCENE 01 — 5 seconds.\nDURATION: 10s\nA shot',shotOptions),/must agree/);
+assert.throws(()=>shotPlanner.planShot('CHARACTERS: Martha\nA shot',shotOptions),/Save a reference/);
+assert.throws(()=>shotPlanner.planShot('CHARACTERS: Martha Young | Martha Present | Rose Young | Rose Present\nA shot',shotOptions),/up to 3/);
+assert.throws(()=>shotPlanner.planShot('CHARACTERS: Martha Young\n<Picture 2> waits.',shotOptions),/numbered/);
+assert.throws(()=>shotPlanner.planShot('CHARACTERS: Martha Young\nA shot',{...shotOptions,characters:[...cast,{...cast[0],id:'duplicate'}]}),/unique name/);
+assert.throws(()=>shotPlanner.planShot('CHARACTERS: Martha Young\nA shot',{...shotOptions,base:'https://other-8188.proxy.runpod.net'}),/connection/);
+const legacyShot=shotPlanner.planShot('SCENE 01 — 6 seconds.\n<Picture 1> waits.',shotOptions);
+assert.equal(legacyShot.duration,6);
+assert.deepEqual(legacyShot.characterIds,['cast-0']);
+assert.ok(legacyShot.prompt.includes('<Picture 1>'));
+assert.equal(shotPlanner.planShot('The bell rings after 10 seconds.',shotOptions).duration,5);
+assert.equal(shotPlanner.planShot('A quiet shot.',{...shotOptions,mode:'video',selectedIds:[]}).references.images.length,0);
+const imageShot=shotPlanner.planShot('CHARACTERS: Martha Young\nDURATION: 8s\nA portrait.',{...shotOptions,mode:'qwen'});
+assert.equal(imageShot.references.images.length,0);
+assert.equal(imageShot.prompt,'A portrait.');
+failAt=-1;
+const queueCount=batchQueue.length;
+for(const group of bm.chunks(shotPlans.map((plan,index)=>({index,prompt:rm.referencePrompt(plan.prompt,plan.references),seed:index,duration:plan.duration,references:plan.references})),5)){
+ const response=await post({action:'bulk',batch_id:'mixed-film',mode:'r2v',duration:5,quality:'draft',aspect:'landscape',items:group});
+ assert.equal(response.status,200,JSON.stringify(await response.json()));
+}
+const filmQueue=batchQueue.slice(queueCount);
+assert.equal(filmQueue.length,50);
+for(let index=0;index<50;index++){
+ const graph=filmQueue[index][2];
+ assert.equal(graph['136'].inputs.length,Math.max(101,Math.ceil(([5,6,8,10][index%4]*24-5)/17)*17+5));
+ assert.equal(graph['pocket-ref-image-0'].inputs.image,'cast-'+(index%9)+'.png');
+ assert.equal(graph['pocket-ref-image-1'].inputs.image,'cast-'+((index+1)%9)+'.png');
+ assert.ok(!graph['pocket-ref-image-2']);
+ assert.ok(graph['136'].inputs.prompt.includes('from <Picture 1>'));
+}
+const beforeInvalid=submitCount;
+const badBatch=await post({action:'bulk',batch_id:'invalid-mixed-film',mode:'r2v',duration:5,quality:'draft',aspect:'landscape',items:[{index:0,prompt:'Valid first',seed:1,duration:5,references:shotPlans[0].references},{index:1,prompt:'Invalid second',seed:2,duration:7,references:shotPlans[0].references}]});
+assert.equal(badBatch.status,400);
+assert.equal(submitCount,beforeInvalid);
+console.log('Passed nine-character cast, 50 mixed-duration/reference shots, past/present identity mapping, legacy/manual fallback, validation before submission, and per-shot ComfyUI graphs.');

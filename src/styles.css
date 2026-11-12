@@ -325,3 +325,10 @@
 .device-sync-settings .device-sync-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .device-sync-settings p { color: var(--muted); }
 .device-sync-settings label { display: grid; gap: 6px; margin-top: 14px; }
+
+.shot-plan{margin:12px 0;border:1px solid var(--line,#393340);border-radius:12px;padding:12px;font-size:13px;max-width:100%}
+.shot-plan summary{cursor:pointer;font-weight:600}
+.shot-plan ol{padding-left:22px;max-height:260px;overflow:auto}
+.shot-plan li{padding:8px 0}
+.shot-plan li strong,.shot-plan li span{display:block}
+.shot-plan li span,.shot-plan p{color:var(--muted,#a7a0b1);overflow-wrap:anywhere;line-height:1.6}
