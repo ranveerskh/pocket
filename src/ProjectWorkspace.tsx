@@ -5,7 +5,7 @@ import {ArrowLeft, ChevronDown, Film, Play, Plus, RotateCcw, Square, X} from 'lu
 import LocalMedia, {DeviceBadge} from './LocalMedia';
 import DownloadButton from './DownloadButton';
 import MediaPoster from './MediaPoster';
-import {creationLabel, creationTitle, galleryItems} from './gallery-model';
+import {creationLabel, creationTitle, galleryItems, type GallerySort} from './gallery-model';
 import {estimatedPercent, jobTiming, mergeTimingSamples, timeLabel, timingBucket} from './timing';
 import {useTimingHistory} from './useTimingHistory';
 import type {Folder, Job} from './vault';
@@ -68,10 +68,14 @@ type Props = {
   onRecover: () => void;
   recovering: boolean;
   connectionNote?: string;
+  focusJobKey?: string;
+  onFocusConsumed?: () => void;
 };
 
 export default function ProjectWorkspace(p: Props) {
   const [sceneColumns,setSceneColumns]=useState(()=>{try{const saved=localStorage.getItem('pocket-scene-columns');return ['1','2','3'].includes(saved||'')?saved!:'auto';}catch{return 'auto';}});
+  const [sort,setSort]=useState<GallerySort>(()=>{try{const saved=localStorage.getItem('pocket-workspace-sort');return saved==='oldest'||saved==='newest'?saved:'scene';}catch{return 'scene';}});
+  const [pendingFocus,setPendingFocus]=useState('');
   const [filter, setFilter] = useState<'scenes' | 'queue' | 'failed'>('scenes');
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [search, setSearch] = useState('');
@@ -83,7 +87,7 @@ export default function ProjectWorkspace(p: Props) {
   const feed = useRef<HTMLDivElement>(null);
   const preview = useRef<HTMLElement>(null);
   const previousCount = useRef(p.jobs.length);
-  const items = useMemo(() => galleryItems(p.jobs, p.folder || 'unfiled'), [p.jobs, p.folder]);
+  const items = useMemo(() => galleryItems(p.jobs, p.folder || 'unfiled','all','',isLocal?sort:'scene'), [p.jobs, p.folder, sort]);
   const queue = useMemo(() => items.filter(job => ACTIVE.has(job.state)), [items]);
   const cancelCount = items.filter(canCancelBulk).length;
   const failed = items.filter(job => FAILED.has(job.state));
@@ -125,9 +129,32 @@ export default function ProjectWorkspace(p: Props) {
     if (selected && !isLocal) preview.current?.scrollIntoView({block: 'nearest'});
   }, [selected]);
   useEffect(() => {
-    if (p.jobs.length > previousCount.current && p.busy) setMobileComposer(false);
+    if (!isLocal && p.jobs.length > previousCount.current && p.busy) setMobileComposer(false);
     previousCount.current = p.jobs.length;
   }, [p.jobs.length, p.busy]);
+
+  useEffect(()=>{
+    if(!isLocal||!p.focusJobKey)return;
+    const index=items.filter(job=>!FAILED.has(job.state)).findIndex(job=>jobKey(job)===p.focusJobKey);
+    if(index<0)return;
+    setMobileComposer(false);
+    setSelected('');
+    setFilter('scenes');
+    setSearch('');
+    setLimit(current=>Math.max(current,index+1));
+    setPendingFocus(p.focusJobKey);
+  },[p.focusJobKey,items]);
+  useEffect(()=>{
+    if(!pendingFocus)return;
+    const target=document.getElementById('shot-'+pendingFocus);
+    if(!target)return;
+    const frame=requestAnimationFrame(()=>{
+      target.scrollIntoView({block:'center',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+      setPendingFocus('');
+      p.onFocusConsumed?.();
+    });
+    return()=>cancelAnimationFrame(frame);
+  },[pendingFocus,showing,limit]);
 
   useEffect(()=>{if(!isLocal||!selectedJob)return;const previous=document.body.style.overflow;const previousFocus=document.activeElement as HTMLElement|null;document.body.style.overflow='hidden';const close=(event:KeyboardEvent)=>{if(event.key==='Escape')setSelected('');if(event.key==='Tab'){const elements=Array.from(preview.current?.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],input,select,video[controls]')||[]);const first=elements[0],last=elements[elements.length-1];if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}}};window.addEventListener('keydown',close);return()=>{document.body.style.overflow=previous;window.removeEventListener('keydown',close);previousFocus?.focus();};},[selectedJob?.id]);
   const clipPreview=selectedJob&&<section ref={preview} className={'workspace-preview panel'+(isLocal?' local-preview-dialog':'')} role={isLocal?'dialog':undefined} aria-modal={isLocal?true:undefined} aria-label="Media preview">
@@ -182,6 +209,7 @@ export default function ProjectWorkspace(p: Props) {
           <button aria-pressed={filter === 'queue'} onClick={() => {setFilter('queue'); setLimit(PAGE_SIZE);}}>Queue {queue.length || ''}</button>
           {failed.length > 0 && <button aria-pressed={filter === 'failed'} onClick={() => {setFilter('failed'); setLimit(PAGE_SIZE);}}>Failed / stopped {failed.length}</button>}
           <button className="workspace-mobile-manage" onClick={p.onManage} disabled={p.busy}>Manage</button>
+          {isLocal&&<label className="local-scene-layout">Sort<select aria-label="Sort scenes" value={sort} onChange={e=>{const next=e.target.value as GallerySort;setSort(next);setLimit(PAGE_SIZE);try{localStorage.setItem('pocket-workspace-sort',next);}catch{}}}><option value="scene">Scene order</option><option value="oldest">Oldest first</option><option value="newest">Newest first</option></select></label>}
           {isLocal&&<label className="local-scene-layout">Layout<select aria-label="Scene layout" value={sceneColumns} onChange={e=>{setSceneColumns(e.target.value);try{localStorage.setItem('pocket-scene-columns',e.target.value);}catch{}}}><option value="auto">Auto</option><option value="1">List</option><option value="2">2 columns</option><option value="3">3 columns</option></select></label>}
           <input type="search" aria-label="Find a scene" placeholder="Find a scene…" value={search} onChange={e => {setSearch(e.target.value);setLimit(PAGE_SIZE);}}/>
         </div>
