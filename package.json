@@ -10,7 +10,8 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build && node scripts/build-offline.mjs",
     "preview": "vite preview",
-    "test": "node scripts/check-workflows.mjs && node scripts/check-gallery.mjs && node scripts/check-device.mjs && node scripts/check-gallery-actions.mjs && node scripts/check-bulk-cancel.mjs && node --experimental-strip-types scripts/check-device-sync.mjs && python3 scripts/check-storage-helper.py"
+    "test": "node scripts/check-workflows.mjs && node scripts/check-gallery.mjs && node scripts/check-device.mjs && node scripts/check-gallery-actions.mjs && node scripts/check-bulk-cancel.mjs && node --experimental-strip-types scripts/check-device-sync.mjs && python3 scripts/check-storage-helper.py",
+    "test:sync-local": "node --experimental-strip-types scripts/check-local-sync.mjs && node scripts/check-device-pairing.mjs"
   },
   "dependencies": {
     "@netlify/blobs": "11.1.8",

@@ -73,3 +73,9 @@
 .theme-swatch>span{display:block;height:5px;width:26px;border-radius:3px}
 :root[data-local-theme] :is(input,textarea,select):focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--selected)}
 :root[data-local-theme] :is(.bulk-heading,.bulk-toggle,.template-heading,.reference-tags,.character-heading small,.mode-switch small,.tile-caption p){color:var(--muted)}
+
+.sync-pin{margin:16px 0;padding:18px;background:var(--surface,var(--panel));border:1px solid var(--accent);border-radius:12px;text-align:center}
+.sync-pin>strong{display:block;font-size:38px;letter-spacing:.28em;padding-left:.28em;font-variant-numeric:tabular-nums;color:var(--accent)}
+.sync-approval{margin:14px 0;padding:14px;border:1px solid var(--accent);border-radius:10px}
+.sync-approval>.button{margin-top:10px;min-height:44px}
+.device-sync-settings>.field-label{display:grid;gap:8px;margin-top:16px}

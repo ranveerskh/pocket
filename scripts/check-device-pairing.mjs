@@ -1,0 +1,23 @@
+import fs from 'node:fs';import vm from 'node:vm';import ts from 'typescript';import assert from 'node:assert/strict';import {webcrypto} from 'node:crypto';
+import {newPairCode,pairKeys} from '../src/device-sync-model.ts';
+const records=new Map();let revision=0,now=Date.now();
+const store={getWithMetadata:async key=>{const value=records.get(key);return value?structuredClone(value):null;},setJSON:async(key,data,options)=>{const old=records.get(key);if(options.onlyIfNew&&old||options.onlyIfMatch&&old?.etag!==options.onlyIfMatch)return{modified:false};const etag=String(++revision);records.set(key,{data:structuredClone(data),etag});return{modified:true,etag};}};
+class Clock extends Date{static now(){return now;}}
+const scope={exports:{},require:()=>({getStore:()=>store}),crypto:webcrypto,Response,Request,URL,TextEncoder,TextDecoder,Uint8Array,Uint32Array,Date:Clock};
+vm.runInNewContext(ts.transpile(fs.readFileSync('netlify/functions/device-pairing.ts','utf8'),{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}),scope);
+const post=(p,token,ip='198.51.100.1',origin='https://studio.test')=>scope.exports.default(new Request('https://studio.test/.netlify/functions/device-pairing',{method:'POST',headers:{'content-type':'application/json',origin,...(token?{authorization:'Bearer '+token}:{})},body:JSON.stringify(p)}),{ip});
+const secret=newPairCode(),{token}=await pairKeys(secret),base='https://pc.tail123.ts.net';
+let r=await post({action:'create',secret,base},token);assert.equal(r.status,200);const invite=await r.json();assert.match(invite.pin,/^\d{4}$/);assert.ok(!JSON.stringify(invite).includes(secret));
+r=await post({action:'join',pin:invite.pin,device:'Windows PC'},undefined,'198.51.100.2');assert.equal(r.status,200);const joined=await r.json();assert.ok(!JSON.stringify(joined).includes(secret));
+r=await post({action:'status',pin:invite.pin,ticket:joined.ticket});assert.equal((await r.json()).waiting,true);
+r=await post({action:'approve',pin:invite.pin,request:'bad'},'a'.repeat(64));assert.equal(r.status,401);
+r=await post({action:'peek',pin:invite.pin},token);const pending=(await r.json()).pending;assert.equal(pending.device,'Windows PC');assert.equal(pending.approved,false);
+r=await post({action:'approve',pin:invite.pin,request:pending.request},token);assert.equal(r.status,200);
+r=await post({action:'status',pin:invite.pin,ticket:'a'.repeat(64)});assert.equal(r.status,401);
+const [a,b]=await Promise.all([post({action:'status',pin:invite.pin,ticket:joined.ticket}),post({action:'status',pin:invite.pin,ticket:joined.ticket})]);assert.equal([a,b].filter(x=>x.status===200).length,1,'A code is consumed only once under concurrent claims');const response=await (a.status===200?a:b).json();assert.equal(response.secret,secret);assert.equal(response.base,base);assert.equal(records.get('pin/'+invite.pin).data.secret,undefined);
+r=await post({action:'join',pin:invite.pin},undefined,'198.51.100.3');assert.equal(r.status,404);
+r=await post({action:'create',secret,base},token);const expired=await r.json();now+=5*60_000+1;r=await post({action:'join',pin:expired.pin},undefined,'198.51.100.4');assert.equal(r.status,404);
+for(let n=0;n<5;n++)await post({action:'join',pin:'9999'},undefined,'198.51.100.5');r=await post({action:'join',pin:'9999'},undefined,'198.51.100.5');assert.equal(r.status,429);
+r=await post({action:'create',secret,base},token,'198.51.100.1','https://evil.test');assert.equal(r.status,403);
+r=await post({action:'create',secret,base:'http://127.0.0.1:8188'},token);assert.equal(r.status,400);
+console.log('4-digit pairing verified: owner approval before key disclosure, single-use concurrent claim, 5-minute expiry, request authentication, cross-origin rejection and rate limiting.');

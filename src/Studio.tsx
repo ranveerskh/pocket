@@ -42,7 +42,7 @@ export default function Studio(){
  const [bulkState,setBulkState]=useState<BulkState>({adding:false,added:0,total:0,error:'',finished:false});const stopBulk=useRef(false);const [recovering,setRecovering]=useState(false);
  const vault=useGalleryStore();const localMedia=useDeviceLibrary(vault);const {jobs,setJobs}=vault;
  const folderExport=useFolderExport(vault,localMedia);
- const deviceSync=useDeviceSync(vault);
+
  const theme=useTheme();
  const [mediaProject,setMediaProject]=useState('');
  const [focusJobKey,setFocusJobKey]=useState('');
@@ -72,6 +72,7 @@ export default function Studio(){
  const [mode,setMode]=useState(isLocal?'image':'video');const isQwen=mode==='qwen',isImage=mode==='image'||isQwen,isR2V=mode==='r2v';const modelName=isQwen?'Qwen Image 2.1':isImage?'Z-Image Turbo':isR2V?'MiniMax H3 R2V':'MiniMax H3 T2V';const workflowId=isR2V?'builtin-r2v':isQwen?'builtin-qwen-image21':undefined;const supportsReference=mode==='video';
  const [tab,setTab]=useState('library');const [base,setBase]=useState(isLocal?'http://127.0.0.1:8000':'');const [draftBase,setDraftBase]=useState(isLocal?'http://127.0.0.1:8000':'');const [connected,setConnected]=useState(false);const [checking,setChecking]=useState(false);const [device,setDevice]=useState('');const [turboReady,setTurboReady]=useState(false);
  const [negativePrompt,setNegativePrompt]=useState(''),[guidance,setGuidance]=useState(1);const [prompt,setPrompt]=useState('');const [duration,setDuration]=useState(5);const [aspect,setAspect]=useState('landscape');const [quality,setQuality]=useState('draft');const [turbo,setTurbo]=useState(false);const [seed,setSeed]=useState('');const [file,setFile]=useState<File|null>(null);const [preview,setPreview]=useState('');
+ const deviceSync=useDeviceSync(vault,isLocal?{base,onConnection:address=>{setBase(address);setDraftBase(address);void connectModel(address,mode);}}:undefined);
  const [current,setCurrent]=useState<string|null>(null);const [busy,setBusy]=useState(false);const [message,setMessage]=useState('');const [jobMessage,setJobMessage]=useState('');const [ready,setReady]=useState(false);const [advanced,setAdvanced]=useState(false);const [elapsed,setElapsed]=useState(0);const fileInput=useRef<HTMLInputElement>(null);
  const job=jobs.find(j=>j.id===current&&!j.hidden); const active=job&&['queued','running','unknown'].includes(job.state);const dims=size(quality,aspect);
  useEffect(()=>{try{const p=JSON.parse(localStorage.getItem('pocket-settings')||'{}');if(['video','r2v','image','qwen'].includes(p.mode))setMode(p.mode);if(typeof p.negativePrompt==='string')setNegativePrompt(p.negativePrompt);if(typeof p.guidance==='number'&&p.guidance>=1&&p.guidance<=10)setGuidance(p.guidance);if(p.base){setBase(p.base);setDraftBase(p.base);}if(typeof p.saveFolder==='string')setSaveFolder(p.saveFolder);if(p.workspace===true)setTab('create');if(p.prompt)setPrompt(p.prompt);if(p.duration)setDuration(p.duration);if(p.aspect)setAspect(p.aspect);if(p.quality)setQuality(p.quality);const tp=JSON.parse(localStorage.getItem('pocket-templates')||'[]');if(Array.isArray(tp))setEnabledTemplates(tp);}catch{}setReady(true);},[]);
@@ -300,7 +301,7 @@ export default function Studio(){
   <h2 className="settings-section-title">Storage</h2>
   <DeviceStorage vault={vault}/>
   <FolderExportSettings service={folderExport}/>
-  {!isLocal&&<DeviceSync service={deviceSync}/>}
+  <DeviceSync service={deviceSync}/>
  </section>}
  {(tab==='library'||tab==='private'&&privateOpen)&&<Gallery projectColumns={projectColumns} onBusy={setGalleryBusy} currentBase={base} key={tab+'-'+mediaProject} initialFolder={mediaProject||undefined} privateView={tab==='private'&&privateOpen} onClosePrivate={()=>{setPrivateOpen(false);setTab('library');void vault.lock().catch(e=>setMessage(e.message));}} vault={vault} busy={busy||!!active} onReuse={reuse} onReference={useAsReference} onCreate={openCreate} onOpenProject={mediaProject?undefined:openProject}/>}
 
