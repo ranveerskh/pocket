@@ -68,7 +68,7 @@ export default function MediaPoster({job}: {job: Job}) {
       if (gone) return;
       const blob = await media.read(job, file);
       if (!blob || gone) return;
-      if (job.mode === 'image') {
+      if (job.mode === 'image'||/\.(png|jpe?g|webp)$/i.test(file.filename)) {
         url = URL.createObjectURL(blob);
         setPoster(url);
       } else {

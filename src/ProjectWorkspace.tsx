@@ -1,3 +1,5 @@
+import {createPortal} from 'react-dom';
+import {isLocal,localStorage} from './local-mode';
 import {useEffect, useMemo, useRef, useState, type ReactNode} from 'react';
 import {ArrowLeft, ChevronDown, Film, Play, Plus, RotateCcw, Square, X} from 'lucide-react';
 import LocalMedia, {DeviceBadge} from './LocalMedia';
@@ -26,16 +28,16 @@ function Progress({job, average, now}: {job: Job; average?: number; now: number}
     : undefined;
   let status = ({
     staging: 'Waiting to submit',
-    submitting: 'Sending to RunPod',
+    submitting: isLocal?'Sending to PC':'Sending to RunPod',
     submission_unknown: 'Submission needs recovery',
     queued: job.queuePosition ? 'Queued #' + job.queuePosition : 'Queued',
     running: 'Rendering · ' + timeLabel(timing.generation ?? timing.total),
-    unknown: 'Checking RunPod status',
+    unknown: isLocal?'Checking PC status':'Checking RunPod status',
     complete: ready ? 'Ready' : 'Output unavailable',
     error: 'Failed',
     cancelled: 'Stopped',
   } as Record<string, string>)[job.state] || job.state;
-  if (job.cancelRequested) status = 'Cancel pending · waiting for RunPod';
+  if (job.cancelRequested) status = isLocal?'Cancel pending · waiting for PC':'Cancel pending · waiting for RunPod';
   else if (running && percent !== undefined) status += ' · estimated';
   return <div className="shot-progress">
     <span>{status}</span>
@@ -69,6 +71,7 @@ type Props = {
 };
 
 export default function ProjectWorkspace(p: Props) {
+  const [sceneColumns,setSceneColumns]=useState(()=>{try{const saved=localStorage.getItem('pocket-scene-columns');return ['1','2','3'].includes(saved||'')?saved!:'auto';}catch{return 'auto';}});
   const [filter, setFilter] = useState<'scenes' | 'queue' | 'failed'>('scenes');
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [search, setSearch] = useState('');
@@ -119,13 +122,19 @@ export default function ProjectWorkspace(p: Props) {
     return () => cancelAnimationFrame(frame);
   }, [p.folder]);
   useEffect(() => {
-    if (selected) preview.current?.scrollIntoView({block: 'nearest'});
+    if (selected && !isLocal) preview.current?.scrollIntoView({block: 'nearest'});
   }, [selected]);
   useEffect(() => {
     if (p.jobs.length > previousCount.current && p.busy) setMobileComposer(false);
     previousCount.current = p.jobs.length;
   }, [p.jobs.length, p.busy]);
 
+  useEffect(()=>{if(!isLocal||!selectedJob)return;const previous=document.body.style.overflow;const previousFocus=document.activeElement as HTMLElement|null;document.body.style.overflow='hidden';const close=(event:KeyboardEvent)=>{if(event.key==='Escape')setSelected('');if(event.key==='Tab'){const elements=Array.from(preview.current?.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],input,select,video[controls]')||[]);const first=elements[0],last=elements[elements.length-1];if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}}};window.addEventListener('keydown',close);return()=>{document.body.style.overflow=previous;window.removeEventListener('keydown',close);previousFocus?.focus();};},[selectedJob?.id]);
+  const clipPreview=selectedJob&&<section ref={preview} className={'workspace-preview panel'+(isLocal?' local-preview-dialog':'')} role={isLocal?'dialog':undefined} aria-modal={isLocal?true:undefined} aria-label="Media preview">
+    <header><strong>{creationLabel(selectedJob)}</strong><button autoFocus={isLocal} className="icon-button" aria-label="Close preview" onClick={()=>setSelected('')}><X size={19}/></button></header>
+    <LocalMedia key={selectedJob.id} job={selectedJob} preview alt={creationTitle(selectedJob)}/>
+    <div className="workspace-preview-actions"><DeviceBadge job={selectedJob}/><DownloadButton job={selectedJob} label="Save file"/><button className="button secondary" disabled={p.busy} onClick={()=>{p.onReuse(selectedJob);setSelected('');compose();}}>Reuse prompt</button>{selectedJob.mode==='image'&&<button className="button secondary" disabled={p.busy} onClick={()=>{p.onReference(selectedJob);setSelected('');compose();}}>Use as reference</button>}</div>
+  </section>;
   function compose() {
     setShowComposer(true);
     setMobileComposer(true);
@@ -151,6 +160,7 @@ export default function ProjectWorkspace(p: Props) {
       <button className="button secondary workspace-queue-link" onClick={() => setFilter('queue')}>
         {running.length ? running.length + ' running' : 'Queue'} · {queue.length}
       </button>
+      {isLocal&&<button className="button primary local-mobile-compose" onClick={compose}><Plus size={17}/>{p.bulk?'Bulk prompts':'Compose'}</button>}
       {cancelCount>0&&<button className="button danger" disabled={p.bulkCancelBusy} onClick={()=>void p.onCancelBulk()}><Square size={14}/>{p.bulkCancelBusy?'Cancelling…':'Cancel all bulk · '+cancelCount}</button>}
       <button className="button secondary workspace-manage" onClick={p.onManage} disabled={p.busy}>Manage media</button>
     </header>
@@ -172,32 +182,24 @@ export default function ProjectWorkspace(p: Props) {
           <button aria-pressed={filter === 'queue'} onClick={() => {setFilter('queue'); setLimit(PAGE_SIZE);}}>Queue {queue.length || ''}</button>
           {failed.length > 0 && <button aria-pressed={filter === 'failed'} onClick={() => {setFilter('failed'); setLimit(PAGE_SIZE);}}>Failed / stopped {failed.length}</button>}
           <button className="workspace-mobile-manage" onClick={p.onManage} disabled={p.busy}>Manage</button>
+          {isLocal&&<label className="local-scene-layout">Layout<select aria-label="Scene layout" value={sceneColumns} onChange={e=>{setSceneColumns(e.target.value);try{localStorage.setItem('pocket-scene-columns',e.target.value);}catch{}}}><option value="auto">Auto</option><option value="1">List</option><option value="2">2 columns</option><option value="3">3 columns</option></select></label>}
           <input type="search" aria-label="Find a scene" placeholder="Find a scene…" value={search} onChange={e => {setSearch(e.target.value);setLimit(PAGE_SIZE);}}/>
         </div>
         {p.connectionNote && queue.length > 0 && <p className="workspace-note" role="status">{p.connectionNote}</p>}
         {needsRecovery && <button className="button secondary" onClick={p.onRecover} disabled={p.recovering || p.busy}>
           <RotateCcw size={15}/>{p.recovering ? 'Checking queue…' : 'Recover queue status'}
         </button>}
-        {selectedJob && <section ref={preview} className="workspace-preview panel" aria-label="Clip preview">
-          <header><strong>{creationLabel(selectedJob)}</strong><button className="icon-button" aria-label="Close preview" onClick={() => setSelected('')}><X size={19}/></button></header>
-          <LocalMedia key={selectedJob.id} job={selectedJob} preview alt={creationTitle(selectedJob)}/>
-          <div className="workspace-preview-actions">
-            <DeviceBadge job={selectedJob}/>
-            <DownloadButton job={selectedJob} label="Save file"/>
-            <button className="button secondary" disabled={p.busy} onClick={() => {p.onReuse(selectedJob); compose();}}>Reuse prompt</button>
-            {selectedJob.mode === 'image' && <button className="button secondary" disabled={p.busy} onClick={() => {p.onReference(selectedJob); compose();}}>Use as reference</button>}
-          </div>
-        </section>}
+        {!isLocal&&clipPreview}
         {!showing.length && <div className="workspace-empty">
           <Film size={30}/><h2>{query ? 'No matching scenes' : filter === 'queue' ? 'Queue is clear' : 'Your scenes appear here'}</h2>
           {!query && filter !== 'queue' && <button className="button primary" onClick={compose}><Plus size={16}/>Create a scene</button>}
         </div>}
-        <div className="workspace-shots">
+        <div className={"workspace-shots"+(isLocal?" local-scene-grid":"")} data-columns={isLocal?sceneColumns:undefined}>
           {showing.slice(0, limit).map(job => {
             const ready = job.state === 'complete' && Boolean(job.files?.length);
             return <article className="workspace-shot panel" id={'shot-' + jobKey(job)} key={jobKey(job)}>
-              {ready && <button className="shot-preview-button" onClick={() => setSelected(jobKey(job))} aria-label={'Play ' + creationLabel(job)}>
-                <MediaPoster job={job}/><span><Play size={16}/> Preview</span>
+              {ready && <button className="shot-preview-button" onClick={() => {setMobileComposer(false);setSelected(jobKey(job));}} aria-label={(isLocal?'Preview ':'Play ') + creationLabel(job)}>
+                <MediaPoster job={job}/><span className="shot-preview-label"><Play size={16}/> Preview</span>
               </button>}
               <div className="workspace-shot-body">
                 <strong>{creationLabel(job)}</strong>
@@ -239,6 +241,7 @@ export default function ProjectWorkspace(p: Props) {
         </div>
       </aside>
     </div>
-    <button className="button primary workspace-mobile-compose" onClick={compose}><Plus size={17}/>{p.bulk ? 'Bulk prompts' : 'Compose'}</button>
+    {isLocal&&selectedJob&&createPortal(<div className="local-preview-backdrop" onClick={e=>{if(e.target===e.currentTarget)setSelected('');}}>{clipPreview}</div>,document.body)}
+    <button hidden={isLocal} className="button primary workspace-mobile-compose" onClick={compose}><Plus size={17}/>{p.bulk ? 'Bulk prompts' : 'Compose'}</button>
   </section>;
 }

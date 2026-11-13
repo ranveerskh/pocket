@@ -21,7 +21,7 @@ export default async function comfy(req: Request) {
       return Response.json(await jsonUp(base,'/upload/image',{method:'POST',body:upload}));
     }
     const p: any = await req.json(); const base = runpodURL(String(p.base || ''));
-    if(['storage_status','storage_plan','storage_delete'].includes(p.action))throw new Error('Deleting files on the laptop from Pocket Studio is not supported. Use the ComfyUI output folder.');
+    if(['storage_status','storage_plan','storage_delete'].includes(p.action))throw new Error('Deleting files on the PC from Pocket Studio is not supported. Use the ComfyUI output folder.');
     if (p.action === 'connect') {
       const stats = await jsonUp(base,'/system_stats');
       const types = [...new Set(Object.values(makeWorkflow({prompt:'Connection check',duration:5,seed:1,quality:'draft',aspect:'landscape',mode:p.mode,custom:p.custom,preflight:true})).map((n: any)=>n.class_type))];

@@ -396,10 +396,30 @@
  .studio-runpod-shell > main { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
 }
 
-/* Local laptop mode has a distinct teal accent. */
-.local-studio-shell { --accent: #80e2d4; --local-accent: #80e2d4; }
-.local-studio-shell .brand-icon { background: var(--local-accent); color: #102321; }
-.local-studio-shell .navigation .selected { background: #173c3a; color: #b2f3e9; }
-.local-studio-shell .status.online { border-color: #3a756d; }
-.local-studio-shell .generate { background: #80e2d4; color: #102321; }
-.local-studio-shell .segments .chosen, .local-studio-shell .mode-switch button.active { border-color: #62b9ad; background: #173c3a; color: #c5f7ef; }
+.local-mobile-compose{display:none}
+.local-scene-layout{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.local-scene-layout select{width:auto;min-height:36px;padding:7px 9px;font-size:12px}
+.local-scene-grid[data-columns="1"]{grid-template-columns:minmax(0,1fr)}
+.local-scene-grid[data-columns="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}
+.local-scene-grid[data-columns="3"]{grid-template-columns:repeat(3,minmax(0,1fr))}
+.local-studio-shell .shot-preview-button{overflow:hidden;padding:0}
+.local-studio-shell .shot-preview-button>.media-poster{display:grid;place-items:center;inset:0;overflow:hidden}
+.local-studio-shell .shot-preview-button>.media-poster img{display:block;position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.local-studio-shell .shot-preview-label{position:relative;font-size:12px}
+.local-preview-backdrop{position:fixed;inset:0;z-index:10000;background:#000b;display:grid;place-items:center;padding:20px 14px max(100px,env(safe-area-inset-bottom));overflow:auto}
+.local-preview-dialog{width:min(900px,100%);max-height:100%;overflow:auto;margin:0;background:var(--panel);border-color:var(--line);color:var(--text)}
+.local-preview-dialog>img,.local-preview-dialog>video{width:100%;height:auto;min-height:120px;max-height:58dvh;object-fit:contain}
+.local-preview-dialog .workspace-preview-actions{justify-content:flex-start}
+.local-preview-dialog header{position:sticky;top:0;background:var(--panel);z-index:1}
+@media(max-width:800px){
+ .local-mobile-compose{display:inline-flex;min-height:42px;margin-left:auto}
+ .local-studio-shell .workspace-filters input{min-width:100px;flex:1}
+ .local-studio-shell .workspace-filters{align-items:center}
+ .local-studio-shell .project-workspace-header{flex-wrap:wrap}
+ .local-studio-shell .workspace-composer.composer-mobile-open{bottom:calc(115px + env(safe-area-inset-bottom));max-height:calc(100dvh - 160px)}
+ .local-scene-grid[data-columns="2"] .workspace-shot:has(.shot-preview-button),.local-scene-grid[data-columns="3"] .workspace-shot:has(.shot-preview-button){display:block}
+ .local-scene-grid[data-columns="2"] .shot-preview-button,.local-scene-grid[data-columns="3"] .shot-preview-button{height:auto;min-height:0;aspect-ratio:4/3}
+ .local-scene-grid[data-columns="3"] .workspace-shot-body{padding:8px;gap:4px}
+ .local-scene-grid[data-columns="3"] .workspace-shot-body :is(p,strong,.shot-progress){font-size:10px}
+ .local-scene-grid[data-columns="3"] .shot-preview-label{font-size:10px;padding:4px 6px}
+}
