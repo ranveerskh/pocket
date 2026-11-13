@@ -122,6 +122,8 @@ export default function Studio(){
 
  useEffect(()=>{if(!active||!job)return;const update=()=>setElapsed(Math.floor((Date.now()-(job.state==='running'&&job.startedAt?job.startedAt:job.created))/1000));update();const t=setInterval(update,1000);return()=>clearInterval(t);},[active,job?.id,job?.state,job?.created,job?.startedAt]);
  async function connectModel(url:string,selectedMode:string){setChecking(true);setMessage('');setConnected(false);try{const origin=new URL(url.trim()).origin;const d=await api(origin,'connect',{mode:selectedMode});setBase(origin);setDraftBase(origin);setConnected(true);setDevice(d.device);setTurboReady(d.turboReady);if(!d.turboReady)setTurbo(false);}catch(e){setMessage((e as Error).message);}finally{setChecking(false);}}
+ const localReconnectStarted=useRef(false);
+ useEffect(()=>{if(!isLocal||!ready||localReconnectStarted.current)return;localReconnectStarted.current=true;try{const saved=JSON.parse(localStorage.getItem('pocket-settings')||'{}');if(saved.base)void connectModel(saved.base,saved.mode||'image');}catch{}},[ready]);
  async function connect(){await connectModel(draftBase,mode);}
  function switchMode(next:string){if(next===mode)return;setMode(next);setAspect((next==='image'||next==='qwen')?'square':'landscape');setQuality((next==='image'||next==='qwen')?'high':'draft');setConnected(false);setFile(null);setCurrent(null);setMessage('');if(base)void connectModel(base,next);}
  async function useAsReference(j:Job){if(!j.files?.length)return;setBusy(true);setMessage('');try{const blob=await localMedia.ensure(j,j.files[0]);if(blob.size>15*1024*1024)throw new Error('Reference image must be under 15 MB.');setMode('video');setCurrent(null);setPrompt('');setFile(new File([blob],j.files[0].filename,{type:blob.type}));setTab('create');if(base)await connectModel(base,'video');}catch(e){setMessage((e as Error).message);setTab('create');}finally{setBusy(false);}}
@@ -267,9 +269,9 @@ export default function Studio(){
   <h1>Settings</h1>
   <section className="panel settings-connection" aria-label="RunPod connection">
    <h2><Link2 size={20}/> {isLocal?'Local ComfyUI connection':'RunPod connection'}</h2>
-   {isLocal&&<p>Run ComfyUI on this laptop with the Pocket Studio website allowed by CORS. This page connects only to this laptop.</p>}<label className="field-label" htmlFor="base">ComfyUI URL</label>
+   {isLocal&&<p>On this laptop use http://127.0.0.1:8188. On your phone use your private Tailscale Serve HTTPS address. Your connection is saved on this device.</p>}<label className="field-label" htmlFor="base">ComfyUI URL</label>
    <input id="base" type="url" value={draftBase} autoCapitalize="none" autoCorrect="off" spellCheck={false}
-    onChange={e=>{setDraftBase(e.target.value);setConnected(false);}} placeholder={isLocal?"http://127.0.0.1:8000":"https://your-pod-8188.proxy.runpod.net"}/>
+    onChange={e=>{setDraftBase(e.target.value);setConnected(false);}} placeholder={isLocal?"http://127.0.0.1:8188 or https://device.tailnet.ts.net":"https://your-pod-8188.proxy.runpod.net"}/>
    {message&&<p className="error" role="alert">{message}</p>}
    <button className="button primary" onClick={connect} disabled={checking||!draftBase.trim()}>
     <Link2 size={16}/>{checking?'Checking pod & models…':'Save & test connection'}
