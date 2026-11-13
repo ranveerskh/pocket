@@ -395,3 +395,11 @@
 @media (max-width: 800px) {
  .studio-runpod-shell > main { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
 }
+
+/* Local laptop mode has a distinct teal accent. */
+.local-studio-shell { --accent: #80e2d4; --local-accent: #80e2d4; }
+.local-studio-shell .brand-icon { background: var(--local-accent); color: #102321; }
+.local-studio-shell .navigation .selected { background: #173c3a; color: #b2f3e9; }
+.local-studio-shell .status.online { border-color: #3a756d; }
+.local-studio-shell .generate { background: #80e2d4; color: #102321; }
+.local-studio-shell .segments .chosen, .local-studio-shell .mode-switch button.active { border-color: #62b9ad; background: #173c3a; color: #c5f7ef; }
