@@ -1,7 +1,7 @@
 import {localStorage,isLocal} from './local-mode';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {Copy, Link2, RefreshCw} from 'lucide-react';
-import {canonicalLocalData,sharedPCBase,mergeSync, newPairCode, openSnapshot, pairKeys, sealSnapshot, type SeenRecords, type SyncSnapshot} from './device-sync-model';
+import {applyLocalSync,canonicalLocalData,sharedPCBase,mergeSync, newPairCode, openSnapshot, pairKeys, sealSnapshot, type SeenRecords, type SyncSnapshot} from './device-sync-model';
 import type {useGalleryStore} from './vault';
 
 type Pairing = {code: string; seen: SeenRecords;base?:string};
@@ -28,7 +28,7 @@ function mergeItems<T extends {id: string}>(items: T[], incoming: T[]) {
   return [...result.values()];
 }
 
-export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOptions?:{base:string;onConnection:(base:string)=>void}) {
+export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOptions?:{base:string;onConnection:(base:string)=>void;onVisibility:(job:import('./vault').Job,hidden:boolean)=>Promise<void>}) {
   const [invite,setInvite]=useState<Invite>();
   const [pending,setPending]=useState<Pending|null>(null);
   const [joining,setJoining]=useState<{pin:string;ticket:string;expiresAt:number}>();
@@ -97,22 +97,27 @@ export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOpt
 
         if (etag) cache.current = {code: request.code, etag, snapshot};
         const latest = live.current;
-        const hasLocalUpdates = latest.jobs !== original.jobs || latest.folders !== original.folders || latest.characters !== original.characters;
+        const hasLocalUpdates = latest.jobs !== original.jobs || latest.folders !== original.folders || latest.characters !== original.characters || latest.locked !== original.locked || latest.protectedGallery !== original.protectedGallery;
         const next = {...request, seen: hasLocalUpdates ? request.seen : merged.seen};
-        if (!hasLocalUpdates && (rebased || merged.incoming.folders.length || merged.incoming.characters.length || merged.incoming.jobs.length)) {
-          local.saveProjectChanges({
-            folders: mergeItems(local.folders, merged.incoming.folders),
-            characters: mergeItems(local.characters, merged.incoming.characters),
-            jobs: mergeItems(local.jobs, merged.incoming.jobs),
-            characterIds: local.characterIds,
-          });
+        if (!hasLocalUpdates) {
+          const data=isLocal?applyLocalSync(local,merged,local.protectedGallery&&!local.locked):{
+            folders:mergeItems(local.folders,merged.incoming.folders),characters:mergeItems(local.characters,merged.incoming.characters),jobs:mergeItems(local.jobs,merged.incoming.jobs),
+          };
+          if(isLocal&&local.protectedGallery&&!local.locked){
+            for(const job of data.jobs){const previous=local.jobs.find(item=>item.id===job.id);if(previous?.hidden!==job.hidden)await options.current?.onVisibility(job,!!job.hidden);}
+          }
+          // An edit made during media encryption wins; retry against it on the next pass.
+          const fresh=live.current;
+          if(fresh.jobs!==original.jobs||fresh.folders!==original.folders||fresh.characters!==original.characters||fresh.locked!==original.locked||fresh.protectedGallery!==original.protectedGallery){setStatus('Local changes will be picked up on the next sync.');return false;}
+          if(rebased||JSON.stringify(data)!==JSON.stringify({folders:local.folders,characters:local.characters,jobs:local.jobs}))local.saveProjectChanges({...data,characterIds:local.characterIds.filter(id=>data.characters.some(character=>character.id===id))});
         }
+
         localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
         setPairing(next);
         current.current = next;
         if(isLocal&&options.current?.base!==base)options.current?.onConnection(base);
         setLast(Date.now());
-        setStatus(hasLocalUpdates ? 'Local changes will be picked up on the next sync.' : 'Projects are up to date.');
+        setStatus(hasLocalUpdates ? 'Local changes will be picked up on the next sync.' : isLocal&&merged.hidden.length&&!local.protectedGallery?'Projects are up to date. Set a Hidden-folder PIN on this device to open synced hidden items.':'Projects are up to date.');
         return true;
       }
       throw new Error('Both devices are updating. Tap Sync now to try again.');
@@ -144,7 +149,7 @@ export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOpt
     if(!isLocal||!pairing?.code||!vault.loaded)return;
     const timer=setTimeout(()=>{if(!document.hidden&&current.current)void sync(current.current,'refresh');},1500);
     return()=>clearTimeout(timer);
-  },[pairing?.code,vault.jobs,vault.folders,vault.characters,vault.loaded,sync]);
+  },[pairing?.code,vault.jobs,vault.folders,vault.characters,vault.loaded,vault.locked,vault.protectedGallery,sync]);
   async function makeInvite(request:Pairing){setBusy(true);setError('');try{const data=await pairRequest('create',{secret:request.code,base:sharedPCBase(request.base)},request.code);setInvite(data);setPending(null);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
   async function create(base?:string){if(!isLocal){await sync({code:newPairCode(),seen:{}},'create');return;}try{const request={code:newPairCode(),seen:{},base:sharedPCBase(base)};if(await sync(request,'create'))await makeInvite(request);}catch(e){setError((e as Error).message);}}
   async function join(code:string){if(!isLocal){await sync({code:code.trim(),seen:{}},'join');return;}setBusy(true);setError('');try{const pin=code.trim();if(!/^\d{4}$/.test(pin))throw new Error('Enter the 4-digit code.');const device=/iPhone|iPad/i.test(navigator.userAgent)?'iPhone / iPad':/Windows/i.test(navigator.userAgent)?'Windows PC':'Another device';const data=await pairRequest('join',{pin,device});setJoining({pin,...data});setStatus('Approve this connection on the first device.');}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
@@ -211,7 +216,7 @@ export default function DeviceSync({service}: {service: ReturnType<typeof useDev
     {service.invite&&<div className="sync-pin"><strong>{service.invite.pin}</strong><p>Enter this code on your other device within 5 minutes.</p></div>}
     {service.pending&&!service.pending.approved&&<div className="sync-approval"><p>{service.pending.device} wants to connect. Approve only if you just entered this code on your other device.</p><button className="button primary" disabled={busy} onClick={()=>void service.approve()}>Approve device</button></div>}
     {service.joining&&<p role="status">Waiting for approval on the first device. <button className="text-button" onClick={service.cancelJoin}>Cancel</button></p>}
-    <p>Both devices need Tailscale connected and the same PC online. Hidden items and device-only files stay local. Removing a device copy does not remove the shared project record.</p>
+    <p>Both devices need Tailscale connected and the same PC online. Project names, categories, reference additions/removals and Hide/Unhide sync too. Set or unlock a Hidden-folder PIN on each device to open hidden items. Device downloads stay local; removing a device copy keeps the shared project record.</p>
     {status&&<p role="status">{status}</p>}{error&&<p className="error" role="alert">{error}</p>}
   </section>;
   return <section className="panel settings-connection device-sync-settings" aria-label="Device Sync">

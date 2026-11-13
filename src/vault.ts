@@ -3,7 +3,7 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import {pruneTimingHistory} from './timing';
 import type {Character} from './reference-model';
 export type MediaFile={podDeleted?:boolean;filename:string;subfolder:string;type:string};
-export type Job={cancelRequested?:boolean;autoCopyPending?:boolean;negativePrompt?:string;guidance?:number;startedAt?:number;timingSource?:'server'|'observed';queueSeconds?:number;totalSeconds?:number;queuePosition?:number;referenceCharacterIds?:string[];referenceProfile?:string;batchId?:string;batchIndex?:number;completedAt?:number;elapsedSeconds?:number;device?:string;turbo?:boolean;referenceUsed?:boolean;durationMapped?:boolean;hidden?:boolean;seedMapped?:boolean;mode?:string;workflowId?:string;workflowName?:string;basePrompt?:string;templates?:string[];folder?:string;id:string;base:string;prompt:string;created:number;state:string;duration:number;seed:number;aspect:string;quality:string;files?:MediaFile[];error?:string};
+export type Job={visibilityChangedAt?:number;cancelRequested?:boolean;autoCopyPending?:boolean;negativePrompt?:string;guidance?:number;startedAt?:number;timingSource?:'server'|'observed';queueSeconds?:number;totalSeconds?:number;queuePosition?:number;referenceCharacterIds?:string[];referenceProfile?:string;batchId?:string;batchIndex?:number;completedAt?:number;elapsedSeconds?:number;device?:string;turbo?:boolean;referenceUsed?:boolean;durationMapped?:boolean;hidden?:boolean;seedMapped?:boolean;mode?:string;workflowId?:string;workflowName?:string;basePrompt?:string;templates?:string[];folder?:string;id:string;base:string;prompt:string;created:number;state:string;duration:number;seed:number;aspect:string;quality:string;files?:MediaFile[];error?:string};
 export type Folder={id:string;name:string};
 type Library={mediaSecret?:string;jobs:Job[];folders:Folder[];characters?:Character[];characterIds?:string[]};
 type Envelope={v:1;salt:string;iv:string;data:string};
@@ -37,6 +37,7 @@ export function useGalleryStore(){
   setJobs(next.jobs);
   setFolders(next.folders);
   setCharacters(next.characters||[]);
+  setCharacterIds(next.characterIds||[]);
  }
  function addProject(folder:Folder,items:Job[]){
   saveProjectChanges({jobs:[...items,...jobs],folders:[...folders,folder],characters,characterIds});

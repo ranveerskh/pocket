@@ -5,7 +5,7 @@ export type SyncData = {folders: Folder[]; jobs: Job[]; characters: Character[]}
 type RecordData = Folder | Job | Character;
 type SyncRecord = {kind: 'folders' | 'jobs' | 'characters'; item: RecordData};
 export type SyncScope='runpod'|'local';
-export type SyncSnapshot = {version: 1; records: SyncRecord[]; hidden: string[];scope?:SyncScope;connection?:string};
+export type SyncSnapshot = {version: 1; records: SyncRecord[]; hidden: string[];scope?:SyncScope;connection?:string;removed?:string[]};
 export type SeenRecords = Record<string, string>;
 
 const keyOf = ({kind, item}: SyncRecord) => kind + ':' + item.id;
@@ -25,7 +25,7 @@ export function canonicalLocalData(data:SyncData,connection:string):SyncData {
  return {folders:data.folders,jobs:data.jobs.map(job=>localBase(job.base,base)?{...job,base}:job),characters:data.characters.map(character=>localBase(character.base,base)?{...character,base}:character)};
 }
 function cleanJob(job: Job,scope:SyncScope='runpod',connection=''): Job | undefined {
-  if (!validId(job.id) || job.hidden || (scope==='local'?!['queued','running','unknown','complete','error','cancelled'].includes(job.state):job.state!=='complete') || (scope==='local'?job.base!==connection:!validBase(job.base)) ||
+  if (!validId(job.id) || (job.hidden && scope!=='local') || (scope==='local'?!['queued','running','unknown','complete','error','cancelled'].includes(job.state):job.state!=='complete') || (scope==='local'?job.base!==connection:!validBase(job.base)) ||
     typeof job.prompt !== 'string' || job.prompt.length > 30_000 || (scope==='local'?job.files!==undefined&&!Array.isArray(job.files):!Array.isArray(job.files)) ||
     job.id.startsWith('pending-') || !Number.isFinite(job.created) || !Number.isFinite(job.seed) || !Number.isFinite(job.duration)) return;
   const files = (job.files||[]).filter(file => file && file.type === 'output' && safePath(file.filename) &&
@@ -50,7 +50,7 @@ function cleanJob(job: Job,scope:SyncScope='runpod',connection=''): Job | undefi
     referenceCharacterIds: Array.isArray(referenceCharacterIds) ? referenceCharacterIds.filter(validId).slice(0, 3) : undefined,
     turbo: turbo === true, templates: Array.isArray(templates) ? templates.filter(validId).slice(0, 50) : undefined,
     state: scope==='local'?job.state:'complete', files,
-    ...(scope==='local'?{startedAt:Number.isFinite(job.startedAt)?job.startedAt:undefined,queuePosition:Number.isFinite(job.queuePosition)?job.queuePosition:undefined,error:typeof job.error==='string'?job.error.slice(0,1000):undefined}:{}),
+    ...(scope==='local'?{hidden:job.hidden===true,visibilityChangedAt:Number.isFinite(job.visibilityChangedAt)?job.visibilityChangedAt:0,startedAt:Number.isFinite(job.startedAt)?job.startedAt:undefined,queuePosition:Number.isFinite(job.queuePosition)?job.queuePosition:undefined,error:typeof job.error==='string'?job.error.slice(0,1000):undefined}:{}),
   };
 }
 
@@ -87,7 +87,7 @@ export function parseSnapshot(raw: string,scope:SyncScope='runpod'): SyncSnapsho
     if (record.kind === 'jobs') data.jobs.push(record.item as Job);
     if (record.kind === 'characters') data.characters.push(record.item as Character);
   }
-  return {version: 1, records: cleanRecords(data,scope,connection), hidden: parsed.hidden.filter(validId),...(scope==='local'?{scope,connection}:{})};
+  return {version: 1, records: cleanRecords(data,scope,connection), hidden: parsed.hidden.filter(validId),...(scope==='local'?{removed:Array.isArray(parsed.removed)?parsed.removed.filter(value=>typeof value==='string'&&/^(folders|characters):[a-zA-Z0-9_-]{1,180}$/.test(value)).slice(0,12000):[]}:{}),...(scope==='local'?{scope,connection}:{})};
 }
 
 async function fingerprint(record: SyncRecord) {
@@ -98,18 +98,23 @@ async function fingerprint(record: SyncRecord) {
 
 export async function mergeSync(local: SyncData, remote: SyncSnapshot, seen: SeenRecords,scope:SyncScope='runpod',connection='') {
   if((remote.scope||'runpod')!==scope)throw new Error('Pairing scope does not match.');
-  if(scope==='local'){connection=sharedPCBase(connection||remote.connection);if(remote.connection!==connection)throw new Error('This pairing uses a different PC.');local=canonicalLocalData(local,connection);}
+  if(scope==='local'){remote=structuredClone(remote);connection=sharedPCBase(connection||remote.connection);if(remote.connection!==connection)throw new Error('This pairing uses a different PC.');local=canonicalLocalData(local,connection);}
   const sharedJobIds = new Set(remote.records.filter(record => record.kind === 'jobs').map(record => record.item.id));
-  const hidden = new Set([...remote.hidden, ...local.jobs.filter(job => job.hidden && sharedJobIds.has(job.id)).map(job => job.id)]);
-  const shared = new Map(remote.records.filter(record => record.kind !== 'jobs' || !hidden.has(record.item.id))
+  const removed=new Set(scope==='local'?remote.removed||[]:[]);
+  if(scope==='local')for(const kind of ['folders','characters'] as const){const ids=new Set(local[kind].map(item=>item.id));for(const key of Object.keys(seen))if(key.startsWith(kind+':')&&!ids.has(key.slice(kind.length+1)))removed.add(key);}
+  const hidden = new Set([...(scope==='local'?[]:remote.hidden), ...(scope==='local'?[]:local.jobs.filter(job => job.hidden && sharedJobIds.has(job.id)).map(job => job.id))]);
+  const shared = new Map(remote.records.filter(record => !removed.has(keyOf(record)) && (scope==='local'||record.kind !== 'jobs' || !hidden.has(record.item.id)))
     .map(record => [keyOf(record), record]));
   const localRecords = cleanRecords(local,scope,connection);
   const hashes = new Map(await Promise.all(localRecords.map(async record => [keyOf(record), await fingerprint(record)] as const)));
   for (const record of localRecords) {
     const key = keyOf(record);
-    if (record.kind === 'jobs' && hidden.has(record.item.id)) continue;
+    if (removed.has(key) || (scope!=='local'&&record.kind === 'jobs' && hidden.has(record.item.id))) continue;
     const existing=shared.get(key);
     if(scope==='local'&&record.kind==='jobs'&&existing?.kind==='jobs'){
+      const remoteVisibility=(existing.item as Job).visibilityChangedAt||0,localVisibility=(record.item as Job).visibilityChangedAt||0;
+      if(remoteVisibility>localVisibility){record.item={...record.item,hidden:(existing.item as Job).hidden,visibilityChangedAt:remoteVisibility};}
+      else if(localVisibility>remoteVisibility){existing.item={...existing.item,hidden:(record.item as Job).hidden,visibilityChangedAt:localVisibility};}
       const rank=(state:string)=>['complete','error','cancelled'].includes(state)?3:state==='running'?2:state==='queued'?1:0;
       const remoteRank=rank((existing.item as Job).state),localRank=rank((record.item as Job).state);
       if(remoteRank>localRank)continue;
@@ -118,21 +123,33 @@ export async function mergeSync(local: SyncData, remote: SyncSnapshot, seen: See
     if (!shared.has(key) || hashes.get(key) !== seen[key]) shared.set(key, record);
   }
 
+  if(scope==='local')for(const record of shared.values())if(record.kind==='jobs'){const job=record.item as Job;if(job.hidden)hidden.add(job.id);if(job.folder&&removed.has('folders:'+job.folder))job.folder=undefined;}
   const incoming: SyncData = {folders: [], jobs: [], characters: []};
   const nextSeen = {...seen};
   for (const [key, record] of shared) {
     const hash = await fingerprint(record);
     const localHash = hashes.get(key);
     // A removed device record stays removed locally. Its shared copy remains available to new devices.
-    if (localHash !== hash && (localHash !== undefined || !seen[key])) {
+    if (localHash !== hash && (localHash !== undefined || !seen[key] || (scope==='local'&&record.kind==='jobs'&&((record.item as Job).hidden||seen['visibility:'+record.item.id]==='hidden')))) {
       if (record.kind === 'folders') incoming.folders.push(record.item as Folder);
-      if (record.kind === 'jobs' && !local.jobs.some(job => job.id === record.item.id && job.hidden)) incoming.jobs.push(record.item as Job);
+      if (record.kind === 'jobs' && (scope==='local'||!local.jobs.some(job => job.id === record.item.id && job.hidden))) incoming.jobs.push(record.item as Job);
       if (record.kind === 'characters') incoming.characters.push(record.item as Character);
     }
     nextSeen[key] = hash;
+    if(scope==='local'&&record.kind==='jobs')nextSeen['visibility:'+record.item.id]=(record.item as Job).hidden?'hidden':'visible';
   }
-  const snapshot: SyncSnapshot = {version: 1, records: [...shared.values()], hidden: [...hidden],...(scope==='local'?{scope,connection}:{})};
-  return {snapshot, incoming, seen: nextSeen, changed: JSON.stringify(remote) !== JSON.stringify(snapshot)};
+  const snapshot: SyncSnapshot = {version: 1, records: [...shared.values()], hidden: [...hidden],...(scope==='local'?{scope,connection,removed:[...removed]}:{})};
+  return {snapshot, incoming, removed:[...removed], hidden:[...hidden], seen: nextSeen, changed: JSON.stringify(remote) !== JSON.stringify(snapshot)};
+}
+
+// Hidden records remain in the encrypted room while a device's Hidden folder is locked.
+export function applyLocalSync(local:SyncData,merged:Awaited<ReturnType<typeof mergeSync>>,canReadHidden:boolean):SyncData {
+ const removed=new Set(merged.removed),hidden=new Set(merged.hidden);
+ function combine<T extends {id:string}>(items:T[],incoming:T[]){const map=new Map(items.map(item=>[item.id,item]));for(const item of incoming)map.set(item.id,{...map.get(item.id),...item});return [...map.values()];}
+ const folders=combine(local.folders,merged.incoming.folders).filter(item=>!removed.has('folders:'+item.id));
+ const characters=combine(local.characters,merged.incoming.characters).filter(item=>!removed.has('characters:'+item.id));
+ const jobs=combine(local.jobs,merged.incoming.jobs).filter(job=>!hidden.has(job.id)||canReadHidden).map(job=>({...job,folder:job.folder&&removed.has('folders:'+job.folder)?undefined:job.folder}));
+ return {folders,characters,jobs};
 }
 
 const b64 = (bytes: Uint8Array) => btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join('')).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');

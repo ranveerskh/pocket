@@ -290,3 +290,9 @@ On the device that already has the projects, open Settings → Phone & PC Sync. 
 Only project metadata, prompts, references and generation status are shared; video bytes stay on the PC. Both devices need their Tailscale connection and access to the same running PC ComfyUI to open the originals. Synchronization runs while the page is visible, shortly after edits and at ten-second intervals. Hidden records and device-only media are excluded. Existing loopback references are changed to the pairing's Tailscale address. Staging submissions are never shared or resubmitted by sync. Removing a device copy keeps the shared record, as in the RunPod sync behavior.
 
 The pairing endpoint uses a five-minute, one-time invitation with owner approval, rate limits, and an internal random secret for continued synchronization. The four digits are only an invitation code; they are not the encryption key.
+
+### Mirrored changes on paired Local devices
+
+Local Phone & PC Sync mirrors project/category names, moves and removals, reference additions/removals, and Hide/Unhide. Removed projects move their creations to Unfiled; removing a saved reference does not delete the original PC input file. Deletion markers prevent an offline device from bringing removed projects or references back. Device-only media deletion remains device-only.
+
+Hidden metadata stays in the encrypted sync room. Each device must set or unlock its own Hidden-folder PIN to open synced hidden items; they are excluded from the normal gallery while locked. Local saved media is encrypted when Hidden is unlocked and the item is imported. Existing Photos/Files exports are separate. Sync runs while the app is open; PC media playback requires the PC and Tailscale online.
