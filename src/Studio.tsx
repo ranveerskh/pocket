@@ -69,7 +69,7 @@ export default function Studio(){
 
  const [enabledTemplates,setEnabledTemplates]=useState<string[]>([]);const [saveFolder,setSaveFolder]=useState('');
  const [mode,setMode]=useState(isLocal?'image':'video');const isQwen=mode==='qwen',isImage=mode==='image'||isQwen,isR2V=mode==='r2v';const modelName=isQwen?'Qwen Image 2.1':isImage?'Z-Image Turbo':isR2V?'MiniMax H3 R2V':'MiniMax H3 T2V';const workflowId=isR2V?'builtin-r2v':isQwen?'builtin-qwen-image21':undefined;const supportsReference=mode==='video';
- const [tab,setTab]=useState('library');const [base,setBase]=useState(isLocal?'http://127.0.0.1:8188':'');const [draftBase,setDraftBase]=useState(isLocal?'http://127.0.0.1:8188':'');const [connected,setConnected]=useState(false);const [checking,setChecking]=useState(false);const [device,setDevice]=useState('');const [turboReady,setTurboReady]=useState(false);
+ const [tab,setTab]=useState('library');const [base,setBase]=useState(isLocal?'http://127.0.0.1:8000':'');const [draftBase,setDraftBase]=useState(isLocal?'http://127.0.0.1:8000':'');const [connected,setConnected]=useState(false);const [checking,setChecking]=useState(false);const [device,setDevice]=useState('');const [turboReady,setTurboReady]=useState(false);
  const [negativePrompt,setNegativePrompt]=useState(''),[guidance,setGuidance]=useState(1);const [prompt,setPrompt]=useState('');const [duration,setDuration]=useState(5);const [aspect,setAspect]=useState('landscape');const [quality,setQuality]=useState('draft');const [turbo,setTurbo]=useState(false);const [seed,setSeed]=useState('');const [file,setFile]=useState<File|null>(null);const [preview,setPreview]=useState('');
  const [current,setCurrent]=useState<string|null>(null);const [busy,setBusy]=useState(false);const [message,setMessage]=useState('');const [jobMessage,setJobMessage]=useState('');const [ready,setReady]=useState(false);const [advanced,setAdvanced]=useState(false);const [elapsed,setElapsed]=useState(0);const fileInput=useRef<HTMLInputElement>(null);
  const job=jobs.find(j=>j.id===current&&!j.hidden); const active=job&&['queued','running','unknown'].includes(job.state);const dims=size(quality,aspect);
@@ -269,7 +269,7 @@ export default function Studio(){
    <h2><Link2 size={20}/> {isLocal?'Local ComfyUI connection':'RunPod connection'}</h2>
    {isLocal&&<p>Run ComfyUI on this laptop with the Pocket Studio website allowed by CORS. This page connects only to this laptop.</p>}<label className="field-label" htmlFor="base">ComfyUI URL</label>
    <input id="base" type="url" value={draftBase} autoCapitalize="none" autoCorrect="off" spellCheck={false}
-    onChange={e=>{setDraftBase(e.target.value);setConnected(false);}} placeholder={isLocal?"http://127.0.0.1:8188":"https://your-pod-8188.proxy.runpod.net"}/>
+    onChange={e=>{setDraftBase(e.target.value);setConnected(false);}} placeholder={isLocal?"http://127.0.0.1:8000":"https://your-pod-8188.proxy.runpod.net"}/>
    {message&&<p className="error" role="alert">{message}</p>}
    <button className="button primary" onClick={connect} disabled={checking||!draftBase.trim()}>
     <Link2 size={16}/>{checking?'Checking pod & models…':'Save & test connection'}
