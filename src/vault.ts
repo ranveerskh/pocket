@@ -1,3 +1,4 @@
+import {localStorage} from './local-mode';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {pruneTimingHistory} from './timing';
 import type {Character} from './reference-model';

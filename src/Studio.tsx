@@ -1,3 +1,5 @@
+import {mediaURL as resolveMediaURL, isLocal} from './local-mode';
+import {localStorage} from './local-mode';
 import {useEffect,useState,useRef} from 'react';
 import {useGalleryStore,type Job} from './vault';
 import Gallery from './Gallery';
@@ -31,7 +33,7 @@ const samples=['A quiet cinematic moment','A character speaks','Product in motio
 const samplePrompts=["One continuous cinematic shot inside a warm café on a rainy night. An adult woman in a navy coat looks up from her coffee and gives a subtle, hopeful smile to someone off camera. Locked camera, natural expressions, realistic skin and soft window reflections. Audio: quiet café ambience, gentle rain. No music, text or subtitles.","One continuous medium close-up of an adult man seated inside a parked bus at night. He looks toward the front-right entrance with quiet concern, remaining seated throughout. At 0.1 seconds he says softly: ‘I thought you weren't coming back.’ His expression stays serious. Audio: low engine hum and rain outside. No other speakers, no music, no text or subtitles.","A cinematic studio shot of a matte black perfume bottle on a wet stone pedestal. A slow, controlled camera orbit reveals soft reflections, with a narrow beam of warm light behind the bottle. Preserve the bottle's shape throughout. Audio: subtle water droplets. No text, labels or music."];
 const newSeed=()=>Math.floor(Math.random()*1000000000000000);
 function size(quality:string,aspect:string){const s=quality==='high'?[1344,768]:quality==='balanced'?[1152,640]:[832,480];return aspect==='square'?[quality==='high'?1024:quality==='balanced'?864:640,quality==='high'?1024:quality==='balanced'?864:640]:aspect==='portrait'?[...s].reverse():s;}
-function media(base:string,f:VideoFile,download=false){return '/api/media?'+new URLSearchParams({base,filename:f.filename,subfolder:f.subfolder,type:f.type||'output',download:download?'1':'0'});}
+function media(base:string,f:VideoFile,download=false){return resolveMediaURL(base,f,download);}
 async function api(base:string,action:string,params:any={}) {const r=await fetch('/api/comfy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({base,action,...params})});const d:any=await r.json();if(!r.ok||d.error)throw new Error(d.error||'Could not reach RunPod.');return d;}
 export default function Studio(){
  const [refBusy,setRefBusy]=useState(false);const[galleryBusy,setGalleryBusy]=useState(false);
@@ -65,8 +67,8 @@ export default function Studio(){
  const cancelInFlight=useRef(false),bulkRequest=useRef<Promise<any>|null>(null);
 
  const [enabledTemplates,setEnabledTemplates]=useState<string[]>([]);const [saveFolder,setSaveFolder]=useState('');
- const [mode,setMode]=useState('video');const isQwen=mode==='qwen',isImage=mode==='image'||isQwen,isR2V=mode==='r2v';const modelName=isQwen?'Qwen Image 2.1':isImage?'Z-Image Turbo':isR2V?'MiniMax H3 R2V':'MiniMax H3 T2V';const workflowId=isR2V?'builtin-r2v':isQwen?'builtin-qwen-image21':undefined;const supportsReference=mode==='video';
- const [tab,setTab]=useState('library');const [base,setBase]=useState('');const [draftBase,setDraftBase]=useState('');const [connected,setConnected]=useState(false);const [checking,setChecking]=useState(false);const [device,setDevice]=useState('');const [turboReady,setTurboReady]=useState(false);
+ const [mode,setMode]=useState(isLocal?'image':'video');const isQwen=mode==='qwen',isImage=mode==='image'||isQwen,isR2V=mode==='r2v';const modelName=isQwen?'Qwen Image 2.1':isImage?'Z-Image Turbo':isR2V?'MiniMax H3 R2V':'MiniMax H3 T2V';const workflowId=isR2V?'builtin-r2v':isQwen?'builtin-qwen-image21':undefined;const supportsReference=mode==='video';
+ const [tab,setTab]=useState('library');const [base,setBase]=useState(isLocal?'http://127.0.0.1:8188':'');const [draftBase,setDraftBase]=useState(isLocal?'http://127.0.0.1:8188':'');const [connected,setConnected]=useState(false);const [checking,setChecking]=useState(false);const [device,setDevice]=useState('');const [turboReady,setTurboReady]=useState(false);
  const [negativePrompt,setNegativePrompt]=useState(''),[guidance,setGuidance]=useState(1);const [prompt,setPrompt]=useState('');const [duration,setDuration]=useState(5);const [aspect,setAspect]=useState('landscape');const [quality,setQuality]=useState('draft');const [turbo,setTurbo]=useState(false);const [seed,setSeed]=useState('');const [file,setFile]=useState<File|null>(null);const [preview,setPreview]=useState('');
  const [current,setCurrent]=useState<string|null>(null);const [busy,setBusy]=useState(false);const [message,setMessage]=useState('');const [jobMessage,setJobMessage]=useState('');const [ready,setReady]=useState(false);const [advanced,setAdvanced]=useState(false);const [elapsed,setElapsed]=useState(0);const fileInput=useRef<HTMLInputElement>(null);
  const job=jobs.find(j=>j.id===current&&!j.hidden); const active=job&&['queued','running','unknown'].includes(job.state);const dims=size(quality,aspect);
@@ -208,7 +210,7 @@ export default function Studio(){
  </details>{message&&<div className="error" role="alert"><AlertCircle size={17}/><span>{message}</span></div>}<button hidden={isBulk} className="generate" onClick={generate} disabled={busy||refBusy||checking||bulkCancelBusy||cancellationPending||!!active||!vault.loaded||bulkState.adding}>{busy?<LoaderCircle className="spin" size={19}/>:<Sparkles size={19}/>} {busy?(file?'Uploading & submitting…':'Submitting…'):active?'Generation in progress':isImage?'Generate image':'Generate video'}<ArrowUpRight size={19}/></button><p className="cost-note">{vault.legacyLocked?'Gallery is locked. Unlock it before creating. ' : ''}Uses your RunPod GPU. No generation starts until you tap.</p></section>
  <details className="workspace-settings"><summary>Generation timing</summary> <Timing jobs={jobs} current={job} elapsed={elapsed} candidate={{id:'timing-current',guidance:isQwen?guidance:undefined,mode:isImage?'image':'video',workflowId,base,prompt,created:Date.now(),state:'draft',duration,seed:0,quality,aspect,device:device||base,turbo:!isImage&&turbo,referenceUsed:isR2V?activeCharacterIds.length>0:!!file,referenceProfile:refProfile,durationMapped:true}}/></details>
  </>;
- return <DeviceLibraryProvider value={localMedia}><div className={'shell'+(isCreation?' studio-workspace-shell':'')}><header className="topbar"><a href="/" className="brand"><span className="brand-icon"><Clapperboard size={21}/></span><span>pocket<span className="brand-light"> studio</span><small>VERSION 10.3.2 · STUDIO</small></span></a><button disabled={galleryBusy||lockedForSubmit} className={'status '+(connected?'online':'')} onClick={()=>setTab('settings')}><span className="dot"/>{checking?'Checking…':connected?'RunPod connected':'Connect RunPod'}<ChevronRight size={14}/></button></header>
+ return <DeviceLibraryProvider value={localMedia}><div className={'shell'+(isCreation?' studio-workspace-shell':'')}><header className="topbar"><a href={isLocal?"/local":"/"} className="brand"><span className="brand-icon"><Clapperboard size={21}/></span><span>pocket<span className="brand-light"> studio</span><small>VERSION 10.3.2 · STUDIO</small></span></a><button disabled={galleryBusy||lockedForSubmit} className={'status '+(connected?'online':'')} onClick={()=>setTab('settings')}><span className="dot"/>{checking?'Checking…':connected?(isLocal?'Laptop connected':'RunPod connected'):(isLocal?'Connect laptop':'Connect RunPod')}<ChevronRight size={14}/></button></header>
  <nav className="navigation" aria-label="Studio">{nav.map(n=><button key={n.id} disabled={lockedForSubmit||galleryBusy} className={(tab===n.id||n.id==='create'&&isCreation)?'selected':''} onClick={()=>{setPrivateOpen(false);if(n.id==='library')setMediaProject('');setTab(n.id);setMessage('');}}><n.icon size={18}/>{n.label}</button>)}</nav>
  <main>{isCreation&&<ProjectWorkspace
    jobs={jobs}
@@ -263,10 +265,10 @@ export default function Studio(){
  {tab==='settings'&&<section className="settings-page">
   <h1>Settings</h1>
   <section className="panel settings-connection" aria-label="RunPod connection">
-   <h2><Link2 size={20}/> RunPod connection</h2>
-   <label className="field-label" htmlFor="base">ComfyUI URL</label>
+   <h2><Link2 size={20}/> {isLocal?'Local ComfyUI connection':'RunPod connection'}</h2>
+   {isLocal&&<p>Run ComfyUI on this laptop with the Pocket Studio website allowed by CORS. This page connects only to this laptop.</p>}<label className="field-label" htmlFor="base">ComfyUI URL</label>
    <input id="base" type="url" value={draftBase} autoCapitalize="none" autoCorrect="off" spellCheck={false}
-    onChange={e=>{setDraftBase(e.target.value);setConnected(false);}} placeholder="https://your-pod-8188.proxy.runpod.net"/>
+    onChange={e=>{setDraftBase(e.target.value);setConnected(false);}} placeholder={isLocal?"http://127.0.0.1:8188":"https://your-pod-8188.proxy.runpod.net"}/>
    {message&&<p className="error" role="alert">{message}</p>}
    <button className="button primary" onClick={connect} disabled={checking||!draftBase.trim()}>
     <Link2 size={16}/>{checking?'Checking pod & models…':'Save & test connection'}
@@ -292,7 +294,7 @@ export default function Studio(){
   <h2 className="settings-section-title">Storage</h2>
   <DeviceStorage vault={vault}/>
   <FolderExportSettings service={folderExport}/>
-  <DeviceSync service={deviceSync}/>
+  {!isLocal&&<DeviceSync service={deviceSync}/>}
  </section>}
  {(tab==='library'||tab==='private'&&privateOpen)&&<Gallery projectColumns={projectColumns} onBusy={setGalleryBusy} currentBase={base} key={tab+'-'+mediaProject} initialFolder={mediaProject||undefined} privateView={tab==='private'&&privateOpen} onClosePrivate={()=>{setPrivateOpen(false);setTab('library');void vault.lock().catch(e=>setMessage(e.message));}} vault={vault} busy={busy||!!active} onReuse={reuse} onReference={useAsReference} onCreate={openCreate} onOpenProject={mediaProject?undefined:openProject}/>}
 

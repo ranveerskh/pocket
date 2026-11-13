@@ -1,3 +1,4 @@
+import {localStorage} from './local-mode';
 import {useRef,useState} from 'react';
 import {Upload,Trash2,Download,Check,FileJson,ArrowUpRight} from 'lucide-react';
 import {localId} from './gallery-model';

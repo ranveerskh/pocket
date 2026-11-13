@@ -1,3 +1,4 @@
+import {localStorage} from './local-mode';
 import {useEffect,useState} from 'react';
 import type {Job} from './vault';
 import {mergeTimingSamples,readTimingSamples,saveTimingSamples} from './timing';

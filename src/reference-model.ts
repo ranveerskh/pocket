@@ -1,3 +1,4 @@
+import {mediaURL as resolveMediaURL, isLocal} from './local-mode';
 export type Character={id:string;name:string;base:string;image?:string;audio?:string;audioSeconds?:number};
 export type References={images:{path:string;name:string}[];audios:{path:string;name:string;seconds:number}[]};
 // Keep saved choices for each pod separate; stale choices must not block this pod.
@@ -24,4 +25,4 @@ export function referencePrompt(prompt:string,refs:References){
  const lines=[...refs.images.map((r,i)=>`${JSON.stringify(r.name)}: preserve identity and appearance from <Picture ${i+1}>.`),...refs.audios.map((r,i)=>`${JSON.stringify(r.name)}: follow the voice timbre of <Audio ${i+1}>; speak only the new dialogue specified below.`)];
  return lines.length?lines.join('\n')+'\n\nSCENE:\n'+prompt:prompt;
 }
-export function referenceFileURL(base:string,path:string){const i=path.lastIndexOf('/');return '/api/media?'+new URLSearchParams({base,filename:path.slice(i+1),subfolder:i<0?'':path.slice(0,i),type:'input'});}
+export function referenceFileURL(base:string,path:string){const i=path.lastIndexOf('/');return resolveMediaURL(base,{filename:path.slice(i+1),subfolder:i<0?'':path.slice(0,i),type:'input'});}

@@ -1,3 +1,4 @@
+import {localStorage} from './local-mode';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {Copy, Link2, RefreshCw} from 'lucide-react';
 import {mergeSync, newPairCode, openSnapshot, pairKeys, sealSnapshot, type SeenRecords, type SyncSnapshot} from './device-sync-model';

@@ -1,6 +1,6 @@
 import {offlineShell} from './offline-shell.mjs';
 import fs from 'node:fs';import vm from 'node:vm';import ts from 'typescript';import assert from 'node:assert/strict';import {webcrypto} from 'node:crypto';
-function compile(file){const code=ts.transpile(fs.readFileSync(file,'utf8'),{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022});const scope={exports:{},require:()=>({}),Blob,File,TextEncoder,TextDecoder,Uint8Array,DataView,ArrayBuffer,Map,Set,Promise,crypto:webcrypto};vm.runInNewContext(code,scope);return scope.exports;}
+function compile(file){const code=ts.transpile(fs.readFileSync(file,'utf8'),{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022});const scope={exports:{},require:name=>name.includes('local-mode')?{isLocal:false,mediaURL:()=>''}:({}),Blob,File,TextEncoder,TextDecoder,Uint8Array,DataView,ArrayBuffer,Map,Set,Promise,crypto:webcrypto};vm.runInNewContext(code,scope);return scope.exports;}
 const archive=compile('src/project-archive.ts'),media=compile('src/media-db.ts');
 assert.equal(archive.crc32(new TextEncoder().encode('123456789')),0xcbf43926);
 const publicJob={id:'one',folder:'story',base:'https://private-pod-8188.proxy.runpod.net',prompt:'Adam waits.\nLeah speaks.',basePrompt:'Original scene',negativePrompt:'watermark',guidance:3,batchIndex:2,created:100,state:'complete',duration:5,seed:42,quality:'draft',aspect:'landscape',mode:'video',files:[{filename:'test.mp4',subfolder:'video',type:'output'}]},hiddenJob={...publicJob,id:'secret',hidden:true,prompt:'Secret prompt'};

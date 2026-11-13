@@ -1,3 +1,4 @@
+import {localStorage} from './local-mode';
 import {useEffect, useLayoutEffect, useState} from 'react';
 import {Monitor, Moon, Sun} from 'lucide-react';
 

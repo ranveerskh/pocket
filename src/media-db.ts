@@ -1,9 +1,10 @@
+import {mediaURL as resolveMediaURL, isLocal} from './local-mode';
 import type {Job,MediaFile} from './vault';
 export type StoredMedia={id:string;owner:string;hidden:boolean;size:number;mime:string;blob?:Blob;cipher?:ArrayBuffer;iv?:Uint8Array};
 export const mediaKey=(job:Job,file:MediaFile)=>JSON.stringify([job.id,file.filename,file.subfolder||'',file.type||'output']);
-export const remoteMediaURL=(base:string,file:MediaFile,download=false)=>'/api/media?'+new URLSearchParams({base,filename:file.filename,subfolder:file.subfolder||'',type:file.type||'output',download:download?'1':'0'});
+export const remoteMediaURL=(base:string,file:MediaFile,download=false)=>resolveMediaURL(base,file,download);
 let connection:Promise<IDBDatabase>|undefined;
-function database(){if(!connection)connection=new Promise<IDBDatabase>((resolve,reject)=>{if(typeof indexedDB==='undefined'){reject(new Error('Device storage is unavailable in this browser.'));return;}const r=indexedDB.open('pocket-device-media',1);r.onupgradeneeded=()=>{const s=r.result.createObjectStore('media',{keyPath:'id'});s.createIndex('owner','owner');};r.onsuccess=()=>{r.result.onversionchange=()=>{r.result.close();connection=undefined;};resolve(r.result);};r.onerror=()=>reject(r.error);r.onblocked=()=>reject(new Error('Close other Pocket Studio tabs, then retry device storage.'));}).catch(e=>{connection=undefined;throw e;});return connection;}
+function database(){if(!connection)connection=new Promise<IDBDatabase>((resolve,reject)=>{if(typeof indexedDB==='undefined'){reject(new Error('Device storage is unavailable in this browser.'));return;}const r=indexedDB.open(isLocal?'pocket-local-device-media':'pocket-device-media',1);r.onupgradeneeded=()=>{const s=r.result.createObjectStore('media',{keyPath:'id'});s.createIndex('owner','owner');};r.onsuccess=()=>{r.result.onversionchange=()=>{r.result.close();connection=undefined;};resolve(r.result);};r.onerror=()=>reject(r.error);r.onblocked=()=>reject(new Error('Close other Pocket Studio tabs, then retry device storage.'));}).catch(e=>{connection=undefined;throw e;});return connection;}
 async function query<T>(run:(store:IDBObjectStore)=>IDBRequest<T>){const db=await database();return new Promise<T>((resolve,reject)=>{const tx=db.transaction('media','readonly'),r=run(tx.objectStore('media'));r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
 export const getStored=(id:string)=>query<StoredMedia|undefined>(s=>s.get(id));
 export const storedForJob=(id:string)=>query<StoredMedia[]>(s=>s.index('owner').getAll(id));
