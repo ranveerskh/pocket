@@ -1,7 +1,8 @@
 import {useEffect, useRef, useState} from 'react';
 import {Film, Image as ImageIcon} from 'lucide-react';
 import {useDeviceMedia} from './LocalMedia';
-import {mediaKey} from './media-db';
+import {mediaKey,remoteMediaURL} from './media-db';
+import {isLocal} from './local-mode';
 import type {Job} from './vault';
 
 let posterQueue: Promise<void> = Promise.resolve();
@@ -46,9 +47,12 @@ export default function MediaPoster({job}: {job: Job}) {
   const anchor = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(false);
   const [poster, setPoster] = useState('');
+  const [fallback,setFallback]=useState('');
+  const [failedSource,setFailedSource]=useState('');
   const file = job.files?.[0];
   const key = file ? mediaKey(job, file) : '';
   const saved = media.saved.has(key);
+  const image=job.mode==='image'||/\.(png|jpe?g|webp)$/i.test(file?.filename||'');
   useEffect(() => {
     if (!anchor.current) return;
     if (typeof IntersectionObserver === 'undefined') {
@@ -61,29 +65,34 @@ export default function MediaPoster({job}: {job: Job}) {
   }, []);
 
   useEffect(() => {
-    if (!visible || !file || !saved) return;
+    if (!visible || !file) return;
+    const remote=isLocal&&job.base&&!file.podDeleted?remoteMediaURL(job.base,file):'';
+    if(!saved){setFallback(remote);return;}
+    setFallback('');
     let gone = false;
     let url = '';
     posterQueue = posterQueue.then(async () => {
       if (gone) return;
       const blob = await media.read(job, file);
-      if (!blob || gone) return;
-      if (job.mode === 'image'||/\.(png|jpe?g|webp)$/i.test(file.filename)) {
+      if(gone)return;
+      if(!blob){setFallback(remote);return;}
+      if (image) {
         url = URL.createObjectURL(blob);
         setPoster(url);
       } else {
-        const thumbnail = await videoPoster(blob);
-        if (!gone) setPoster(thumbnail);
+        try{const thumbnail = await videoPoster(blob);if(!gone)setPoster(thumbnail);}
+        catch{if(!gone&&isLocal){url=URL.createObjectURL(blob);setFallback(url);}}
       }
-    }).catch(() => {});
+    }).catch(()=>{if(!gone)setFallback(remote);});
     return () => {
       gone = true;
       if (url) URL.revokeObjectURL(url);
       setPoster('');
+      setFallback('');
     };
-  }, [visible, key, saved, job.hidden, media.changes[job.id]]);
+  }, [visible, key, saved, job.hidden,job.base,file?.podDeleted,image,media.changes[job.id]]);
 
   return <span ref={anchor} className="media-poster" aria-hidden="true">
-    {poster ? <img src={poster} alt=""/> : job.mode === 'image' ? <ImageIcon size={24}/> : <Film size={24}/>}
+    {poster&&failedSource!==poster?<img src={poster} alt="" onError={()=>setFailedSource(poster)}/>:visible&&fallback&&failedSource!==fallback?(image?<img src={fallback} alt="" loading="lazy" onError={()=>setFailedSource(fallback)}/>:<video src={fallback+'#t=0.1'} muted playsInline preload="metadata" onError={()=>setFailedSource(fallback)}/>):image?<ImageIcon size={24}/>:<Film size={24}/>}
   </span>;
 }

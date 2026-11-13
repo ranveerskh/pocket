@@ -423,3 +423,9 @@
  .local-scene-grid[data-columns="3"] .workspace-shot-body :is(p,strong,.shot-progress){font-size:10px}
  .local-scene-grid[data-columns="3"] .shot-preview-label{font-size:10px;padding:4px 6px}
 }
+
+/* Manage list thumbnails occupy their own column instead of covering the card. */
+.local-studio-shell .gallery-list .gallery-tile>.media-poster{position:relative;inset:auto;grid-column:1;grid-row:1;width:180px;height:116px;min-height:116px;overflow:hidden}
+.local-studio-shell .gallery-list .tile-caption{grid-column:2;grid-row:1}
+.local-studio-shell .media-poster>:is(img,video){position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
+@media(max-width:650px){.local-studio-shell .gallery-list .gallery-tile>.media-poster{width:110px;height:116px}}
