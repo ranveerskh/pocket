@@ -36,6 +36,7 @@ function size(quality:string,aspect:string){const s=quality==='high'?[1344,768]:
 function media(base:string,f:VideoFile,download=false){return resolveMediaURL(base,f,download);}
 async function api(base:string,action:string,params:any={}) {const r=await fetch('/api/comfy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({base,action,...params})});const d:any=await r.json();if(!r.ok||d.error)throw new Error(d.error||'Could not reach RunPod.');return d;}
 export default function Studio(){
+ const pageRef=useRef<HTMLElement>(null);
  const [refBusy,setRefBusy]=useState(false);const[galleryBusy,setGalleryBusy]=useState(false);
  const [privatePrompt,setPrivatePrompt]=useState(false),[privateOpen,setPrivateOpen]=useState(false);
  const [bulkState,setBulkState]=useState<BulkState>({adding:false,added:0,total:0,error:'',finished:false});const stopBulk=useRef(false);const [recovering,setRecovering]=useState(false);
@@ -185,7 +186,7 @@ export default function Studio(){
  const isCreation=tab==='create'||tab==='bulk';
  const recentJob=job&&(job.folder||'')===saveFolder?job:
   jobs.find(item=>!item.hidden&&(item.folder||'')===saveFolder);
- useEffect(()=>{window.scrollTo(0,0);},[tab]);
+ useEffect(()=>{if(!isLocal)pageRef.current?.scrollTo(0,0);else window.scrollTo(0,0);},[tab]);
  const lockedForSubmit=busy||refBusy||checking||bulkState.adding||bulkCancelBusy;
  function openProject(project?:string){setSaveFolder(project||'');setMessage('');setTab('create');}
  function openCreate(project?:string){setSaveFolder(project||'');setMessage('');setTab('standalone');}
@@ -210,9 +211,9 @@ export default function Studio(){
  </details>{message&&<div className="error" role="alert"><AlertCircle size={17}/><span>{message}</span></div>}<button hidden={isBulk} className="generate" onClick={generate} disabled={busy||refBusy||checking||bulkCancelBusy||cancellationPending||!!active||!vault.loaded||bulkState.adding}>{busy?<LoaderCircle className="spin" size={19}/>:<Sparkles size={19}/>} {busy?(file?'Uploading & submitting…':'Submitting…'):active?'Generation in progress':isImage?'Generate image':'Generate video'}<ArrowUpRight size={19}/></button><p className="cost-note">{vault.legacyLocked?'Gallery is locked. Unlock it before creating. ' : ''}Uses your RunPod GPU. No generation starts until you tap.</p></section>
  <details className="workspace-settings"><summary>Generation timing</summary> <Timing jobs={jobs} current={job} elapsed={elapsed} candidate={{id:'timing-current',guidance:isQwen?guidance:undefined,mode:isImage?'image':'video',workflowId,base,prompt,created:Date.now(),state:'draft',duration,seed:0,quality,aspect,device:device||base,turbo:!isImage&&turbo,referenceUsed:isR2V?activeCharacterIds.length>0:!!file,referenceProfile:refProfile,durationMapped:true}}/></details>
  </>;
- return <DeviceLibraryProvider value={localMedia}><div className={'shell'+(isCreation?' studio-workspace-shell':'')}><header className="topbar"><a href={isLocal?"/local":"/"} className="brand"><span className="brand-icon"><Clapperboard size={21}/></span><span>pocket<span className="brand-light"> studio</span><small>VERSION 10.3.2 · STUDIO</small></span></a><button disabled={galleryBusy||lockedForSubmit} className={'status '+(connected?'online':'')} onClick={()=>setTab('settings')}><span className="dot"/>{checking?'Checking…':connected?(isLocal?'Laptop connected':'RunPod connected'):(isLocal?'Connect laptop':'Connect RunPod')}<ChevronRight size={14}/></button></header>
+ return <DeviceLibraryProvider value={localMedia}><div className={'shell'+(!isLocal?' studio-runpod-shell':'')+(isCreation?' studio-workspace-shell':'')}><header className="topbar"><a href={isLocal?"/local":"/"} className="brand"><span className="brand-icon"><Clapperboard size={21}/></span><span>pocket<span className="brand-light"> studio</span><small>VERSION 10.3.2 · STUDIO</small></span></a><button disabled={galleryBusy||lockedForSubmit} className={'status '+(connected?'online':'')} onClick={()=>setTab('settings')}><span className="dot"/>{checking?'Checking…':connected?(isLocal?'Laptop connected':'RunPod connected'):(isLocal?'Connect laptop':'Connect RunPod')}<ChevronRight size={14}/></button></header>
  <nav className="navigation" aria-label="Studio">{nav.map(n=><button key={n.id} disabled={lockedForSubmit||galleryBusy} className={(tab===n.id||n.id==='create'&&isCreation)?'selected':''} onClick={()=>{setPrivateOpen(false);if(n.id==='library')setMediaProject('');setTab(n.id);setMessage('');}}><n.icon size={18}/>{n.label}</button>)}</nav>
- <main>{isCreation&&<ProjectWorkspace
+ <main ref={pageRef}>{isCreation&&<ProjectWorkspace
    jobs={jobs}
    folders={vault.folders}
    folder={saveFolder}
@@ -298,5 +299,5 @@ export default function Studio(){
  </section>}
  {(tab==='library'||tab==='private'&&privateOpen)&&<Gallery projectColumns={projectColumns} onBusy={setGalleryBusy} currentBase={base} key={tab+'-'+mediaProject} initialFolder={mediaProject||undefined} privateView={tab==='private'&&privateOpen} onClosePrivate={()=>{setPrivateOpen(false);setTab('library');void vault.lock().catch(e=>setMessage(e.message));}} vault={vault} busy={busy||!!active} onReuse={reuse} onReference={useAsReference} onCreate={openCreate} onOpenProject={mediaProject?undefined:openProject}/>}
 
- </main><CompletionAlerts showPreferences={tab==='settings'} jobs={jobs} loaded={vault.loaded} locked={vault.legacyLocked} onOpen={()=>{setPrivateOpen(false);setTab('library');}}/><footer className="footer"><button className="footer-brand" disabled={refBusy||galleryBusy} onClick={()=>setPrivatePrompt(true)}>POCKET STUDIO · VERSION 10.3.2</button></footer>{privatePrompt&&<PrivateAccess vault={vault} onClose={()=>setPrivatePrompt(false)} onOpen={()=>{setPrivatePrompt(false);setPrivateOpen(true);setTab('private');}}/>}</div></DeviceLibraryProvider>;
+ <CompletionAlerts showPreferences={tab==='settings'} jobs={jobs} loaded={vault.loaded} locked={vault.legacyLocked} onOpen={()=>{setPrivateOpen(false);setTab('library');}}/><footer className="footer"><button className="footer-brand" disabled={refBusy||galleryBusy} onClick={()=>setPrivatePrompt(true)}>POCKET STUDIO · VERSION 10.3.2</button></footer></main>{privatePrompt&&<PrivateAccess vault={vault} onClose={()=>setPrivatePrompt(false)} onOpen={()=>{setPrivatePrompt(false);setPrivateOpen(true);setTab('private');}}/>}</div></DeviceLibraryProvider>;
 }

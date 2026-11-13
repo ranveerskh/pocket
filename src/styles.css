@@ -377,3 +377,21 @@
 .bulk-cancel-controls{padding:0 12px 12px}
 .bulk-cancel-note{color:var(--muted);font-size:12px;line-height:1.6;padding:8px 12px;overflow-wrap:anywhere}
 .project-workspace>.bulk-cancel-note{flex-shrink:0;padding:0 0 10px}
+
+/* Keep the RunPod header and navigation steady while page content scrolls. */
+.studio-runpod-shell { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; }
+.studio-runpod-shell > .topbar, .studio-runpod-shell > .navigation { flex-shrink: 0; }
+.studio-runpod-shell > main { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
+.studio-runpod-shell > main > .footer { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+@media (min-width: 801px) {
+ .studio-runpod-shell .topbar { height: 64px; }
+ .studio-runpod-shell .brand { font-size: 22px; }
+ .studio-runpod-shell .brand-icon { width: 36px; height: 36px; }
+ .studio-runpod-shell .navigation { padding-top: 8px; }
+ .studio-runpod-shell .navigation button { min-height: 36px; padding: 8px 12px; }
+ .studio-runpod-shell > main { display: flex; flex-direction: column; }
+ .studio-runpod-shell > main > .footer { flex-shrink: 0; margin-top: 8px; padding: 8px 0 10px; }
+}
+@media (max-width: 800px) {
+ .studio-runpod-shell > main { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+}
