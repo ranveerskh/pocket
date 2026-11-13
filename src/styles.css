@@ -373,3 +373,7 @@
  .sidebar-folded .workspace-sidebar{padding:8px 4px}
  .sidebar-folded .workspace-sidebar>.text-button{justify-content:center;width:100%;padding:8px 0;font-size:10px}
 }
+
+.bulk-cancel-controls{padding:0 12px 12px}
+.bulk-cancel-note{color:var(--muted);font-size:12px;line-height:1.6;padding:8px 12px;overflow-wrap:anywhere}
+.project-workspace>.bulk-cancel-note{flex-shrink:0;padding:0 0 10px}

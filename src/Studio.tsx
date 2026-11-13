@@ -18,6 +18,7 @@ import CompletionAlerts from './CompletionAlerts';
 import CharacterReferences from './CharacterReferences';
 import {characterReferences,currentCharacterIds,referencePrompt} from './reference-model';
 import {chunks, type BulkFormat} from './bulk-model';
+import {applyBatchCancellation, canCancelBulk, type BatchCancellation} from './bulk-cancel';
 import {planShot, planShots} from './shot-plan';
 import ShotPreview from './ShotPreview';
 import {localId} from './gallery-model';
@@ -60,6 +61,9 @@ export default function Studio(){
  const [bulkDraft,setBulkDraft]=useState('');
  const [bulkFormat,setBulkFormat]=useState<BulkFormat>('auto');
  const [cancelling,setCancelling]=useState<string[]>([]);
+ const [bulkCancelBusy,setBulkCancelBusy]=useState(false),[bulkCancelMessage,setBulkCancelMessage]=useState('');
+ const cancelInFlight=useRef(false),bulkRequest=useRef<Promise<any>|null>(null);
+
  const [enabledTemplates,setEnabledTemplates]=useState<string[]>([]);const [saveFolder,setSaveFolder]=useState('');
  const [mode,setMode]=useState('video');const isQwen=mode==='qwen',isImage=mode==='image'||isQwen,isR2V=mode==='r2v';const modelName=isQwen?'Qwen Image 2.1':isImage?'Z-Image Turbo':isR2V?'MiniMax H3 R2V':'MiniMax H3 T2V';const workflowId=isR2V?'builtin-r2v':isQwen?'builtin-qwen-image21':undefined;const supportsReference=mode==='video';
  const [tab,setTab]=useState('library');const [base,setBase]=useState('');const [draftBase,setDraftBase]=useState('');const [connected,setConnected]=useState(false);const [checking,setChecking]=useState(false);const [device,setDevice]=useState('');const [turboReady,setTurboReady]=useState(false);
@@ -74,8 +78,43 @@ export default function Studio(){
  const activeCharacterIds=currentCharacterIds(vault.characters,vault.characterIds,base);
  function shotOptions(){return {duration,mode,characters:vault.characters,selectedIds:activeCharacterIds,base};}
  const refProfile=mode==='r2v'?'i'+vault.characters.filter(c=>activeCharacterIds.includes(c.id)&&c.image).length+'-a'+vault.characters.filter(c=>activeCharacterIds.includes(c.id)&&c.audio).length:undefined;
- const pendingKey=jobs.filter(j=>['queued','running','unknown'].includes(j.state)).map(j=>j.id).join(',');
- useEffect(()=>{if(vault.legacyLocked||!pendingKey)return;let gone=false;let timer:ReturnType<typeof setTimeout>;const poll=async()=>{try{const pending=jobs.filter(j=>['queued','running','unknown'].includes(j.state));const groups=new Map<string,string[]>();for(const j of pending)groups.set(j.base,[...(groups.get(j.base)||[]),j.id]);for(const [url,ids]of groups){for(const group of chunks(ids,100)){const d=await api(url,'statuses',{ids:group});if(gone)return;setJobs(prev=>prev.map(j=>{const status=d.statuses[j.id];return status&&['queued','running','unknown'].includes(j.state)?mergeJobStatus(j,status):j;}));const currentStatus=current?d.statuses[current]:undefined;if(currentStatus)setJobMessage(currentStatus.state==='queued'?'Waiting in queue · position '+currentStatus.position:currentStatus.state==='running'?'Generating on your RunPod GPU':currentStatus.state==='unknown'?'Job not found. Check this pod’s queue.':'');}}}catch(e){if(!gone)setJobMessage('Connection interrupted. Retrying… '+(e as Error).message);}if(!gone)timer=setTimeout(poll,5000);};void poll();return()=>{gone=true;clearTimeout(timer);};},[pendingKey,vault.legacyLocked,current]);
+ const cancellationPending=jobs.some(j=>j.base===base&&j.cancelRequested);
+ const bulkCancelStatus=bulkCancelMessage&&!bulkCancelBusy&&!jobs.some(j=>j.cancelRequested)&&!bulkCancelMessage.startsWith('Could not save')?'Bulk cancellation confirmed. Queued shots stopped.':bulkCancelMessage;
+ const pendingKey=jobs.filter(j=>j.cancelRequested||['queued','running','unknown'].includes(j.state)).map(j=>j.id+(j.cancelRequested?'!':'')).join(',');
+ useEffect(()=>{
+  if(vault.legacyLocked||!pendingKey)return;
+  let gone=false;
+  let timer:ReturnType<typeof setTimeout>;
+  const poll=async()=>{
+   try{
+    const pending=jobs.filter(job=>job.cancelRequested||['queued','running','unknown'].includes(job.state));
+    for(const url of new Set(pending.map(job=>job.base))){
+     const cancelled=pending.filter(job=>job.base===url&&job.cancelRequested&&job.batchId);
+     if(cancelled.length&&!cancelInFlight.current){
+      for(const batchIds of chunks([...new Set(cancelled.map(job=>job.batchId!))],100)){
+       const result:BatchCancellation=await api(url,'cancel_batches',{batch_ids:batchIds});
+       if(gone)return;
+       setJobs(previous=>previous.map(job=>applyBatchCancellation(job,url,result)));
+      }
+     }
+     const ids=pending.filter(job=>job.base===url&&!job.cancelRequested).map(job=>job.id);
+     for(const group of chunks(ids,100)){
+      const data=await api(url,'statuses',{ids:group});
+      if(gone)return;
+      setJobs(previous=>previous.map(job=>{
+       const status=job.base===url?data.statuses[job.id]:undefined;
+       return status&&!job.cancelRequested&&['queued','running','unknown'].includes(job.state)?mergeJobStatus(job,status):job;
+      }));
+      const status=current?data.statuses[current]:undefined;
+      if(status)setJobMessage(status.state==='queued'?'Waiting in queue · position '+status.position:status.state==='running'?'Generating on your RunPod GPU':status.state==='unknown'?'Job not found. Check this pod’s queue.':'');
+     }
+    }
+   }catch(error){if(!gone)setJobMessage('Connection interrupted. Cancellation requests will retry when RunPod is reachable. '+(error as Error).message);}
+   if(!gone)timer=setTimeout(poll,5000);
+  };
+  void poll();
+  return()=>{gone=true;clearTimeout(timer);};
+ },[pendingKey,vault.legacyLocked,current]);
  useEffect(()=>{function leave(){if(document.hidden){setPrivateOpen(false);setPrivatePrompt(false);setTab(t=>t==='private'?'library':t);}}document.addEventListener('visibilitychange',leave);return()=>document.removeEventListener('visibilitychange',leave);},[]);
 
  useEffect(()=>{if(!active||!job)return;const update=()=>setElapsed(Math.floor((Date.now()-(job.state==='running'&&job.startedAt?job.startedAt:job.created))/1000));update();const t=setInterval(update,1000);return()=>clearInterval(t);},[active,job?.id,job?.state,job?.created,job?.startedAt]);
@@ -83,20 +122,51 @@ export default function Studio(){
  async function connect(){await connectModel(draftBase,mode);}
  function switchMode(next:string){if(next===mode)return;setMode(next);setAspect((next==='image'||next==='qwen')?'square':'landscape');setQuality((next==='image'||next==='qwen')?'high':'draft');setConnected(false);setFile(null);setCurrent(null);setMessage('');if(base)void connectModel(base,next);}
  async function useAsReference(j:Job){if(!j.files?.length)return;setBusy(true);setMessage('');try{const blob=await localMedia.ensure(j,j.files[0]);if(blob.size>15*1024*1024)throw new Error('Reference image must be under 15 MB.');setMode('video');setCurrent(null);setPrompt('');setFile(new File([blob],j.files[0].filename,{type:blob.type}));setTab('create');if(base)await connectModel(base,'video');}catch(e){setMessage((e as Error).message);setTab('create');}finally{setBusy(false);}}
- async function generate(){setMessage('');if(vault.legacyLocked){setTab('library');return;}if(!vault.loaded){setMessage('Gallery is loading. Please wait.');return;}if(!connected){setTab('settings');setMessage('Connect your RunPod first.');return;}if(!prompt.trim()){setMessage('Write a prompt first.');return;}setBusy(true);try{const shot=planShot(prompt,shotOptions());const references=shot.references;let image='';if(file&&mode!=='r2v'){const form=new FormData();form.append('base',base);form.append('image',file);const r=await fetch('/api/comfy',{method:'POST',body:form});const d:any=await r.json();if(!r.ok||d.error)throw new Error(d.error||'Image upload failed.');image=(d.subfolder?d.subfolder+'/':'')+d.name;}
+ async function generate(){setMessage('');if(cancelInFlight.current||cancellationPending){setMessage('Finish cancelling the previous batch on this RunPod before submitting new prompts.');return;}if(vault.legacyLocked){setTab('library');return;}if(!vault.loaded){setMessage('Gallery is loading. Please wait.');return;}if(!connected){setTab('settings');setMessage('Connect your RunPod first.');return;}if(!prompt.trim()){setMessage('Write a prompt first.');return;}setBusy(true);try{const shot=planShot(prompt,shotOptions());const references=shot.references;let image='';if(file&&mode!=='r2v'){const form=new FormData();form.append('base',base);form.append('image',file);const r=await fetch('/api/comfy',{method:'POST',body:form});const d:any=await r.json();if(!r.ok||d.error)throw new Error(d.error||'Image upload failed.');image=(d.subfolder?d.subfolder+'/':'')+d.name;}
  const usedSeed=seed.trim()?Number(seed):newSeed();const effectivePrompt=referencePrompt(applyTemplates(shot.prompt,enabledTemplates,isImage?'image':'video'),references);const d=await api(base,'generate',{prompt:effectivePrompt,negativePrompt:isQwen?negativePrompt:undefined,guidance:isQwen?guidance:undefined,duration:shot.duration,aspect,quality,turbo,seed:usedSeed,image,mode,references});const j:Job={device:device||base,turbo:!isImage&&turbo,referenceUsed:isR2V?!!(references.images.length||references.audios.length):!!image,referenceProfile:isR2V?'i'+references.images.length+'-a'+references.audios.length:undefined,referenceCharacterIds:isR2V?shot.characterIds:undefined,durationMapped:true,mode:isImage?'image':'video',workflowId,workflowName:modelName,basePrompt:prompt,negativePrompt:isQwen?negativePrompt:undefined,guidance:isQwen?guidance:undefined,templates:enabledTemplates,folder:vault.folders.some(f=>f.id===saveFolder)?saveFolder:undefined,seedMapped:true,id:d.prompt_id,base,prompt:effectivePrompt,created:Date.now(),state:'queued',duration:shot.duration,aspect,quality,seed:usedSeed};setJobs(prev=>[j,...prev]);setCurrent(j.id);setJobMessage('Submitted to ComfyUI');}catch(e){setMessage((e as Error).message);}finally{setBusy(false);}}
  async function enqueueBulk(prompts:string[]){
- setMessage('');if(!connected||vault.legacyLocked||!vault.loaded){setTab(vault.legacyLocked?'library':'settings');return;}if(bulkState.adding)return;stopBulk.current=false;setCurrent(null);const batchId=localId();setBulkState({adding:true,added:0,total:prompts.length,error:'',finished:false});let added=0;
+ setMessage('');if(!connected||vault.legacyLocked||!vault.loaded){setTab(vault.legacyLocked?'library':'settings');return;}if(bulkState.adding||cancelInFlight.current||cancellationPending)return;stopBulk.current=false;setCurrent(null);const batchId=localId();setBulkState({adding:true,added:0,total:prompts.length,error:'',finished:false});let added=0;
  try{const shots=planShots(prompts,shotOptions());let image='';if(file&&mode!=='r2v'){const form=new FormData();form.append('base',base);form.append('image',file);const r=await fetch('/api/comfy',{method:'POST',body:form});const d:any=await r.json();if(!r.ok||d.error)throw new Error(d.error||'Image upload failed.');image=(d.subfolder?d.subfolder+'/':'')+d.name;}
  const plans=shots.map((shot,index)=>({...shot,index,prompt:referencePrompt(applyTemplates(shot.prompt,enabledTemplates,isImage?'image':'video'),shot.references),basePrompt:prompts[index],seed:seed.trim()?Number(seed):newSeed()}));
  const placeholders:Job[]=plans.map(p=>({id:'pending-'+batchId+'-'+p.index,batchId,batchIndex:p.index,base,mode:isImage?'image':'video',workflowId,workflowName:modelName,basePrompt:p.basePrompt,negativePrompt:isQwen?negativePrompt:undefined,guidance:isQwen?guidance:undefined,prompt:p.prompt,templates:enabledTemplates,folder:saveFolder||undefined,created:Date.now(),state:'staging',duration:p.duration,aspect,quality,seed:p.seed,seedMapped:true,durationMapped:true,device:device||base,turbo:!isImage&&turbo,referenceUsed:isR2V?!!(p.references.images.length||p.references.audios.length):!!image,referenceProfile:isR2V?'i'+p.references.images.length+'-a'+p.references.audios.length:undefined,referenceCharacterIds:isR2V?p.characterIds:undefined}));
  setJobs(prev=>[...placeholders,...prev]);
  for(const group of chunks(plans,5)){if(stopBulk.current)break;setJobs(prev=>prev.map(job=>job.batchId===batchId&&group.some(item=>item.index===job.batchIndex)?{...job,state:'submitting'}:job));
- let d:any;try{d=await api(base,'bulk',{batch_id:batchId,items:group.map(p=>({index:p.index,prompt:p.prompt,seed:p.seed,duration:p.duration,references:p.references})),negativePrompt:isQwen?negativePrompt:undefined,guidance:isQwen?guidance:undefined,mode,duration,aspect,quality,turbo,image});}catch(e){setJobs(prev=>prev.map(j=>j.batchId===batchId&&group.some(p=>p.index===j.batchIndex)?{...j,state:'submission_unknown'}:j));throw new Error('Connection interrupted while adding prompts. Use Recover queue status before trying again. '+(e as Error).message);}
+ let d:any;try{bulkRequest.current=api(base,'bulk',{batch_id:batchId,items:group.map(p=>({index:p.index,prompt:p.prompt,seed:p.seed,duration:p.duration,references:p.references})),negativePrompt:isQwen?negativePrompt:undefined,guidance:isQwen?guidance:undefined,mode,duration,aspect,quality,turbo,image});d=await bulkRequest.current;}catch(e){setJobs(prev=>prev.map(j=>j.batchId===batchId&&group.some(p=>p.index===j.batchIndex)?{...j,state:'submission_unknown'}:j));throw new Error('Connection interrupted while adding prompts. Use Recover queue status before trying again. '+(e as Error).message);}
  setJobs(prev=>prev.map(j=>{if(j.batchId!==batchId||!group.some(p=>p.index===j.batchIndex))return j;const result=d.items.find((x:any)=>x.index===j.batchIndex);return result?{...j,id:result.id,state:'queued'}:{...j,state:'submission_unknown'};}));if(d.items[0])setCurrent(old=>old||d.items[0].id);added+=d.items.length;setBulkState({adding:true,added,total:prompts.length,error:'',finished:false});if(d.partial_error)throw new Error(d.partial_error);}
- setBulkState({adding:false,added,total:prompts.length,error:added<prompts.length?'Stopped adding. Already queued jobs will continue on RunPod.':'',finished:added===prompts.length});
- }catch(e){setBulkState({adding:false,added,total:prompts.length,error:(e as Error).message,finished:false});}finally{setJobs(prev=>prev.map(j=>j.batchId===batchId&&j.state==='staging'?{...j,state:'cancelled'}:j));}}
- async function recoverBulk(){setRecovering(true);try{const pending=jobs.filter(j=>j.batchId&&['submitting','submission_unknown'].includes(j.state));const batches=[...new Set(pending.map(j=>j.base+'|'+j.batchId))];for(const key of batches){const [url,batchId]=key.split('|');const d=await api(url,'recover_batch',{batch_id:batchId});setJobs(prev=>prev.map(j=>{if(j.batchId!==batchId||j.base!==url)return j;const found=d.items.find((x:any)=>x.index===j.batchIndex);return found?{...j,id:found.id,state:'queued'}:j;}));}setBulkState(prev=>({...prev,error:'Queue status recovered where available. Unconfirmed items were not automatically resubmitted.'}));}catch(e){setBulkState(prev=>({...prev,error:(e as Error).message}));}finally{setRecovering(false);}}
+ setBulkState({adding:false,added,total:prompts.length,error:added<prompts.length?'Stopped adding remaining prompts.':'',finished:added===prompts.length});
+ }catch(e){setBulkState({adding:false,added,total:prompts.length,error:(e as Error).message,finished:false});}finally{bulkRequest.current=null;setJobs(prev=>prev.map(j=>j.batchId===batchId&&j.state==='staging'?{...j,state:'cancelled',cancelRequested:undefined}:j));}}
+ async function recoverBulk(){setRecovering(true);try{const pending=jobs.filter(j=>j.batchId&&!j.cancelRequested&&['submitting','submission_unknown'].includes(j.state));const batches=[...new Set(pending.map(j=>j.base+'|'+j.batchId))];for(const key of batches){const [url,batchId]=key.split('|');const d=await api(url,'recover_batch',{batch_id:batchId});setJobs(prev=>prev.map(j=>{if(j.batchId!==batchId||j.base!==url||j.cancelRequested||!['submitting','submission_unknown'].includes(j.state))return j;const found=d.items.find((x:any)=>x.index===j.batchIndex);return found?{...j,id:found.id,state:'queued'}:j;}));}setBulkState(prev=>({...prev,error:'Queue status recovered where available. Unconfirmed items were not automatically resubmitted.'}));}catch(e){setBulkState(prev=>({...prev,error:(e as Error).message}));}finally{setRecovering(false);}}
+ async function cancelBulk(batchId?:string){
+  if(cancelInFlight.current||vault.legacyLocked||!vault.loaded)return;
+  const targets=jobs.filter(job=>!job.hidden&&(job.folder||'')===saveFolder&&canCancelBulk(job)&&(!batchId||job.batchId===batchId));
+  if(!targets.length)return;
+  const groups=new Map<string,string[]>();
+  for(const job of targets)groups.set(job.base,[...new Set([...(groups.get(job.base)||[]),job.batchId!])]);
+  stopBulk.current=true;
+  cancelInFlight.current=true;
+  setBulkCancelBusy(true);
+  setBulkCancelMessage('Cancelling queued and running shots…');
+  try{
+   // Persist intent before contacting a pod so an offline cancellation survives reload.
+   vault.saveProjectChanges({jobs:jobs.map(job=>groups.get(job.base)?.includes(job.batchId||'')&&canCancelBulk(job)?{...job,cancelRequested:true,error:'Cancellation pending. Connect the original RunPod to finish stopping this batch.'}:job),folders:vault.folders,characters:vault.characters,characterIds:vault.characterIds});
+   // A request already being submitted must finish before its batch is removed.
+   await bulkRequest.current?.catch(()=>{});
+   setBulkState(previous=>({...previous,finished:false}));
+   let failed=false;
+   let stopping=false;
+   for(const [url,batchIds] of groups){
+    try{
+     for(const group of chunks(batchIds,100)){
+      const result:BatchCancellation=await api(url,'cancel_batches',{batch_ids:group});
+      setJobs(previous=>previous.map(job=>applyBatchCancellation(job,url,result)));
+      stopping ||= result.items.some(item=>item.state==='running'||item.state==='queued');
+     }
+    }catch{failed=true;}
+   }
+   setBulkCancelMessage(failed?'Cancel pending. Keep the app open and connect the original RunPod; cancellation will retry automatically.':stopping?'Queue cleared. Waiting for RunPod to finish stopping the running shot.':'Bulk cancellation confirmed. Queued shots stopped.');
+  }catch(error){setBulkCancelMessage('Could not save cancellation. '+(error as Error).message);}
+  finally{cancelInFlight.current=false;setBulkCancelBusy(false);}
+ }
  async function cancel(target:Job){
   if(cancelling.includes(target.id))return;
   setCancelling(ids=>[...ids,target.id]);
@@ -114,7 +184,7 @@ export default function Studio(){
  const recentJob=job&&(job.folder||'')===saveFolder?job:
   jobs.find(item=>!item.hidden&&(item.folder||'')===saveFolder);
  useEffect(()=>{window.scrollTo(0,0);},[tab]);
- const lockedForSubmit=busy||refBusy||checking||bulkState.adding;
+ const lockedForSubmit=busy||refBusy||checking||bulkState.adding||bulkCancelBusy;
  function openProject(project?:string){setSaveFolder(project||'');setMessage('');setTab('create');}
  function openCreate(project?:string){setSaveFolder(project||'');setMessage('');setTab('standalone');}
  const nav=[
@@ -128,17 +198,17 @@ export default function Studio(){
  {!connected&&<button className="connect-banner" onClick={()=>setTab('settings')}><span className="banner-icon"><Wifi size={19}/></span><span><strong>Connect your RunPod.</strong><small>Check your connection before creating.</small></span><ArrowUpRight size={20}/></button>}
  {isR2V&&<details className="workspace-settings"><summary>{activeCharacterIds.length?activeCharacterIds.map((id,index)=>'Picture '+(index+1)+' · '+(vault.characters.find(c=>c.id===id)?.name||'Reference')).join(' / '):'Character references'}</summary><CharacterReferences characters={vault.characters} selected={vault.characterIds} base={base} connected={connected} disabled={busy||checking||bulkState.adding} locked={vault.legacyLocked||!vault.loaded} onSelected={vault.setCharacterIds} onSave={c=>vault.setCharacters(prev=>[...prev,c])} onRemove={id=>{vault.setCharacters(prev=>prev.filter(c=>c.id!==id));vault.setCharacterIds(prev=>prev.filter(x=>x!==id));}} onBusy={setRefBusy}/></details>}
 <section className="panel editor">{!isBulk&&<><label className="field-label" htmlFor="prompt">Your prompt <span>{isImage?'Describe the subject, light & style.':'Include dialogue & sound, if you like.'}</span></label><textarea id="prompt" maxLength={20000} value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder={isImage?'A cinematic portrait beside a rainy café window. Warm light, natural skin texture, soft reflections…':'A rain-soaked city at midnight. A stranger steps off the last bus… Describe the scene, camera, movement and sound.'}/><div className="prompt-footer"><span>{prompt.length.toLocaleString()} / 20,000</span><div className="prompt-tools"><PasteButton onPaste={setPrompt} disabled={bulkState.adding}/><button className="text-button" onClick={()=>setPrompt('')} disabled={!prompt}>Clear</button></div></div><ShotPreview prompts={prompt.trim()?[prompt]:[]} options={shotOptions()}/><div className="ideas">{(isImage?['Cinematic portrait','Rainy city','Product photography']:samples).map((s,i)=><button key={s} onClick={()=>setPrompt(isImage?['Cinematic close-up portrait of an adult woman with wavy brown hair beside a rainy café window. Navy wool coat, thoughtful expression, natural skin texture, warm light, shallow depth of field, realistic photography. No text or logos.','A quiet Canadian city street at midnight after rain. Empty sidewalks, warm café lights reflected on wet pavement, a bus stop in the distance, cinematic wide shot, realistic photography. No text or logos.','Studio product photograph of a matte black perfume bottle on dark wet stone, narrow warm backlight, subtle water droplets, precise reflections and deep shadows. Premium editorial photography, no label, no text.'][i]:samplePrompts[i])}><Sparkles size={11}/>{s}</button>)}</div></>}
- <div hidden={!isBulk}><BulkPanel alwaysOpen showQueue={standalone} text={bulkDraft} onText={setBulkDraft} format={bulkFormat} onFormat={setBulkFormat} jobs={jobs.filter(j=>!j.hidden&&(j.folder||'')===saveFolder)} onStart={enqueueBulk} onStop={()=>{stopBulk.current=true;}} state={bulkState} disabled={busy||refBusy||checking||!connected||vault.legacyLocked||!vault.loaded} recovering={recovering} onRecover={recoverBulk} shotOptions={shotOptions()} hasUncertain={jobs.some(j=>['submitting','submission_unknown'].includes(j.state))}/></div>
+ <div hidden={!isBulk}><BulkPanel onCancel={cancelBulk} cancelling={bulkCancelBusy} cancelMessage={bulkCancelStatus} alwaysOpen showQueue={standalone} text={bulkDraft} onText={setBulkDraft} format={bulkFormat} onFormat={setBulkFormat} jobs={jobs.filter(j=>!j.hidden&&(j.folder||'')===saveFolder)} onStart={enqueueBulk} onStop={()=>{stopBulk.current=true;}} state={bulkState} disabled={busy||refBusy||checking||bulkCancelBusy||cancellationPending||!connected||vault.legacyLocked||!vault.loaded} recovering={recovering} onRecover={recoverBulk} shotOptions={shotOptions()} hasUncertain={jobs.some(j=>['submitting','submission_unknown'].includes(j.state))}/></div>
  {supportsReference&&<><input type="file" accept="image/jpeg,image/png,image/webp" ref={fileInput} hidden onChange={e=>selectFile(e.target.files?.[0])}/>{preview?<div className="reference-loaded"><img src={preview} alt="Reference first frame"/><div><strong>{file?.name}</strong><small>Reference first frame</small></div><button className="icon-button" aria-label="Remove reference image" onClick={()=>{setFile(null);if(fileInput.current)fileInput.current.value='';}}><X size={18}/></button></div>:<button className="reference" onClick={()=>fileInput.current?.click()}><ImagePlus size={22}/><span><strong>Add a reference image</strong><small>Optional first frame · JPG, PNG, WebP</small></span><Plus size={18}/></button>}</>}
  {isQwen&&<section className="negative-prompt-section"><label className="field-label" htmlFor="negative-prompt">Negative prompt <span>{isBulk?'Applies to every image in this batch.':'Optional · what to avoid.'}</span></label><textarea id="negative-prompt" maxLength={10000} value={negativePrompt} onChange={e=>{setNegativePrompt(e.target.value);if(e.target.value.trim()&&guidance===1)setGuidance(3);}} placeholder="Blurry, distorted hands, text, watermark…"/><p className="negative-prompt-help">Adding a negative prompt sets guidance above 1 so it can affect the image.</p></section>}
  <details className="workspace-settings"><summary>Render settings</summary><Templates kind={isImage?'image':'video'} enabled={enabledTemplates} onChange={setEnabledTemplates}/><div className="section-line"/>{!isImage&&<><div className="setting-row"><label className="field-label" htmlFor="duration">Default duration</label><span className="muted">seconds</span></div><div className="segments duration" id="duration">{[4,5,6,8,10].map(n=><button aria-pressed={duration===n} className={duration===n?'chosen':''} key={n} onClick={()=>setDuration(n)}>{n}s</button>)}</div></>}
  {<div className="two-cols"><div><label className="field-label" htmlFor="aspect">Frame</label><select id="aspect" value={aspect} onChange={e=>setAspect(e.target.value)}><option value="landscape">Landscape · 16:9</option><option value="portrait">Portrait · 9:16</option><option value="square">Square · 1:1</option></select></div><div><label className="field-label" htmlFor="quality">Size</label><select id="quality" value={quality} onChange={e=>setQuality(e.target.value)}><option value="draft">Draft · smaller</option><option value="balanced">Balanced</option><option value="high">High · larger</option></select></div></div>}<div className="size-note">{dims[0]} × {dims[1]} px · {isQwen?'25 steps':isImage?'8 steps':'24 fps'} <span>{isImage?'One image per prompt.':'Duration rounds to the model’s frame blocks.'}</span></div>
 
  <button className="advanced-toggle" onClick={()=>setAdvanced(!advanced)} aria-expanded={advanced}><Settings2 size={15}/>Advanced settings<ChevronRight size={15} className={advanced?'rotated':''}/></button>{advanced&&<div className="advanced"><label className="field-label" htmlFor="seed">Seed <span>Empty = random each time</span></label><div className="seed-row"><input id="seed" inputMode="numeric" value={seed} onChange={e=>setSeed(e.target.value.replace(/[^0-9]/g,''))} placeholder="Random"/><button className="icon-button" aria-label="Randomize seed" onClick={()=>setSeed(String(newSeed()))}><RotateCcw size={17}/></button></div>{isQwen&&<label className="field-label qwen-guidance" htmlFor="qwen-guidance">Qwen guidance (CFG)<input id="qwen-guidance" type="number" min={1} max={10} step={0.1} value={guidance} onChange={e=>setGuidance(Number(e.target.value))}/><span>Use a value above 1 with a negative prompt.</span></label>}{!isImage&&<label className="check-row"><input type="checkbox" checked={turbo} onChange={e=>setTurbo(e.target.checked)} disabled={!turboReady}/><span><strong>Turbo · {isR2V?'4':'8'}-step LoRA</strong><small>{turboReady?'Fewer sampling steps. Results may differ.':'Connect to check if the Turbo LoRA is installed.'}</small></span><Zap size={17}/></label>}</div>}
- </details>{message&&<div className="error" role="alert"><AlertCircle size={17}/><span>{message}</span></div>}<button hidden={isBulk} className="generate" onClick={generate} disabled={busy||refBusy||checking||!!active||!vault.loaded||bulkState.adding}>{busy?<LoaderCircle className="spin" size={19}/>:<Sparkles size={19}/>} {busy?(file?'Uploading & submitting…':'Submitting…'):active?'Generation in progress':isImage?'Generate image':'Generate video'}<ArrowUpRight size={19}/></button><p className="cost-note">{vault.legacyLocked?'Gallery is locked. Unlock it before creating. ' : ''}Uses your RunPod GPU. No generation starts until you tap.</p></section>
+ </details>{message&&<div className="error" role="alert"><AlertCircle size={17}/><span>{message}</span></div>}<button hidden={isBulk} className="generate" onClick={generate} disabled={busy||refBusy||checking||bulkCancelBusy||cancellationPending||!!active||!vault.loaded||bulkState.adding}>{busy?<LoaderCircle className="spin" size={19}/>:<Sparkles size={19}/>} {busy?(file?'Uploading & submitting…':'Submitting…'):active?'Generation in progress':isImage?'Generate image':'Generate video'}<ArrowUpRight size={19}/></button><p className="cost-note">{vault.legacyLocked?'Gallery is locked. Unlock it before creating. ' : ''}Uses your RunPod GPU. No generation starts until you tap.</p></section>
  <details className="workspace-settings"><summary>Generation timing</summary> <Timing jobs={jobs} current={job} elapsed={elapsed} candidate={{id:'timing-current',guidance:isQwen?guidance:undefined,mode:isImage?'image':'video',workflowId,base,prompt,created:Date.now(),state:'draft',duration,seed:0,quality,aspect,device:device||base,turbo:!isImage&&turbo,referenceUsed:isR2V?activeCharacterIds.length>0:!!file,referenceProfile:refProfile,durationMapped:true}}/></details>
  </>;
- return <DeviceLibraryProvider value={localMedia}><div className={'shell'+(isCreation?' studio-workspace-shell':'')}><header className="topbar"><a href="/" className="brand"><span className="brand-icon"><Clapperboard size={21}/></span><span>pocket<span className="brand-light"> studio</span><small>VERSION 10.3.1 · STUDIO</small></span></a><button disabled={galleryBusy||lockedForSubmit} className={'status '+(connected?'online':'')} onClick={()=>setTab('settings')}><span className="dot"/>{checking?'Checking…':connected?'RunPod connected':'Connect RunPod'}<ChevronRight size={14}/></button></header>
+ return <DeviceLibraryProvider value={localMedia}><div className={'shell'+(isCreation?' studio-workspace-shell':'')}><header className="topbar"><a href="/" className="brand"><span className="brand-icon"><Clapperboard size={21}/></span><span>pocket<span className="brand-light"> studio</span><small>VERSION 10.3.2 · STUDIO</small></span></a><button disabled={galleryBusy||lockedForSubmit} className={'status '+(connected?'online':'')} onClick={()=>setTab('settings')}><span className="dot"/>{checking?'Checking…':connected?'RunPod connected':'Connect RunPod'}<ChevronRight size={14}/></button></header>
  <nav className="navigation" aria-label="Studio">{nav.map(n=><button key={n.id} disabled={lockedForSubmit||galleryBusy} className={(tab===n.id||n.id==='create'&&isCreation)?'selected':''} onClick={()=>{setPrivateOpen(false);if(n.id==='library')setMediaProject('');setTab(n.id);setMessage('');}}><n.icon size={18}/>{n.label}</button>)}</nav>
  <main>{isCreation&&<ProjectWorkspace
    jobs={jobs}
@@ -152,6 +222,9 @@ export default function Studio(){
    onManage={()=>{setMediaProject(saveFolder||'unfiled');setTab('library');}}
    onReuse={reuse}
    onCancel={cancel}
+   onCancelBulk={cancelBulk}
+   bulkCancelBusy={bulkCancelBusy}
+   bulkCancelMessage={bulkCancelStatus}
    cancelling={cancelling}
    onReference={useAsReference}
    onRecover={recoverBulk}
@@ -223,5 +296,5 @@ export default function Studio(){
  </section>}
  {(tab==='library'||tab==='private'&&privateOpen)&&<Gallery projectColumns={projectColumns} onBusy={setGalleryBusy} currentBase={base} key={tab+'-'+mediaProject} initialFolder={mediaProject||undefined} privateView={tab==='private'&&privateOpen} onClosePrivate={()=>{setPrivateOpen(false);setTab('library');void vault.lock().catch(e=>setMessage(e.message));}} vault={vault} busy={busy||!!active} onReuse={reuse} onReference={useAsReference} onCreate={openCreate} onOpenProject={mediaProject?undefined:openProject}/>}
 
- </main><CompletionAlerts showPreferences={tab==='settings'} jobs={jobs} loaded={vault.loaded} locked={vault.legacyLocked} onOpen={()=>{setPrivateOpen(false);setTab('library');}}/><footer className="footer"><button className="footer-brand" disabled={refBusy||galleryBusy} onClick={()=>setPrivatePrompt(true)}>POCKET STUDIO · VERSION 10.3.1</button></footer>{privatePrompt&&<PrivateAccess vault={vault} onClose={()=>setPrivatePrompt(false)} onOpen={()=>{setPrivatePrompt(false);setPrivateOpen(true);setTab('private');}}/>}</div></DeviceLibraryProvider>;
+ </main><CompletionAlerts showPreferences={tab==='settings'} jobs={jobs} loaded={vault.loaded} locked={vault.legacyLocked} onOpen={()=>{setPrivateOpen(false);setTab('library');}}/><footer className="footer"><button className="footer-brand" disabled={refBusy||galleryBusy} onClick={()=>setPrivatePrompt(true)}>POCKET STUDIO · VERSION 10.3.2</button></footer>{privatePrompt&&<PrivateAccess vault={vault} onClose={()=>setPrivatePrompt(false)} onOpen={()=>{setPrivatePrompt(false);setPrivateOpen(true);setTab('private');}}/>}</div></DeviceLibraryProvider>;
 }

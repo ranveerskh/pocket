@@ -1,6 +1,6 @@
 {
   "name": "pocket-studio-netlify",
-  "version": "10.3.1",
+  "version": "10.3.2",
   "private": true,
   "type": "module",
   "engines": {
@@ -10,7 +10,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build && node scripts/build-offline.mjs",
     "preview": "vite preview",
-    "test": "node scripts/check-workflows.mjs && node scripts/check-gallery.mjs && node scripts/check-device.mjs && node scripts/check-gallery-actions.mjs && node --experimental-strip-types scripts/check-device-sync.mjs && python3 scripts/check-storage-helper.py"
+    "test": "node scripts/check-workflows.mjs && node scripts/check-gallery.mjs && node scripts/check-device.mjs && node scripts/check-gallery-actions.mjs && node scripts/check-bulk-cancel.mjs && node --experimental-strip-types scripts/check-device-sync.mjs && python3 scripts/check-storage-helper.py"
   },
   "dependencies": {
     "@netlify/blobs": "11.1.8",

@@ -7,6 +7,7 @@ import {creationLabel, creationTitle, galleryItems} from './gallery-model';
 import {estimatedPercent, jobTiming, mergeTimingSamples, timeLabel, timingBucket} from './timing';
 import {useTimingHistory} from './useTimingHistory';
 import type {Folder, Job} from './vault';
+import {canCancelBulk} from './bulk-cancel';
 
 const PAGE_SIZE = 24;
 const scrollPositions = new Map<string, {top: number; limit: number}>();
@@ -34,12 +35,13 @@ function Progress({job, average, now}: {job: Job; average?: number; now: number}
     error: 'Failed',
     cancelled: 'Stopped',
   } as Record<string, string>)[job.state] || job.state;
-  if (running && percent !== undefined) status += ' · estimated';
+  if (job.cancelRequested) status = 'Cancel pending · waiting for RunPod';
+  else if (running && percent !== undefined) status += ' · estimated';
   return <div className="shot-progress">
     <span>{status}</span>
     {(running || ready || job.state === 'queued') &&
       <progress max={100} value={percent ?? (job.state === 'queued' ? 0 : undefined)} aria-label={status}/>}
-    {job.error && <small>{job.error}</small>}
+    {job.error && !job.cancelRequested && <small>{job.error}</small>}
   </div>;
 }
 
@@ -57,6 +59,9 @@ type Props = {
   onReuse: (job: Job) => void;
   onCancel: (job: Job) => Promise<void>;
   cancelling: string[];
+  onCancelBulk: () => Promise<void>;
+  bulkCancelBusy: boolean;
+  bulkCancelMessage: string;
   onReference: (job: Job) => void;
   onRecover: () => void;
   recovering: boolean;
@@ -77,6 +82,7 @@ export default function ProjectWorkspace(p: Props) {
   const previousCount = useRef(p.jobs.length);
   const items = useMemo(() => galleryItems(p.jobs, p.folder || 'unfiled'), [p.jobs, p.folder]);
   const queue = useMemo(() => items.filter(job => ACTIVE.has(job.state)), [items]);
+  const cancelCount = items.filter(canCancelBulk).length;
   const failed = items.filter(job => FAILED.has(job.state));
   const visible = filter === 'queue' ? queue : filter === 'failed' ? failed : items.filter(job => !FAILED.has(job.state));
   const query = search.trim().toLowerCase();
@@ -145,8 +151,10 @@ export default function ProjectWorkspace(p: Props) {
       <button className="button secondary workspace-queue-link" onClick={() => setFilter('queue')}>
         {running.length ? running.length + ' running' : 'Queue'} · {queue.length}
       </button>
+      {cancelCount>0&&<button className="button danger" disabled={p.bulkCancelBusy} onClick={()=>void p.onCancelBulk()}><Square size={14}/>{p.bulkCancelBusy?'Cancelling…':'Cancel all bulk · '+cancelCount}</button>}
       <button className="button secondary workspace-manage" onClick={p.onManage} disabled={p.busy}>Manage media</button>
     </header>
+    {p.bulkCancelMessage&&<p className="bulk-cancel-note" role="status">{p.bulkCancelMessage}</p>}
     <div className={'project-workspace-columns' + (sidebar ? '' : ' sidebar-folded') + (showComposer ? '' : ' composer-folded')}>
       <aside className="workspace-sidebar">
         <button className="text-button" onClick={() => setSidebar(value => !value)} aria-expanded={sidebar}>
@@ -224,7 +232,7 @@ export default function ProjectWorkspace(p: Props) {
             {[...running, ...queue.filter(job => job.state !== 'running')].slice(0, 4).map(job => <button
               key={jobKey(job)} className="text-button" onClick={() => jump(job)}
             >
-              {creationLabel(job)} · {job.state === 'running' ? 'Rendering' : job.state === 'queued' ? 'Queued' : 'Submitting'}
+              {creationLabel(job)} · {job.cancelRequested ? 'Cancel pending' : job.state === 'running' ? 'Rendering' : job.state === 'queued' ? 'Queued' : 'Submitting'}
             </button>)}
           </section>}
           {p.composer}

@@ -32,6 +32,44 @@ export default async function comfy(req: Request) {
       const lora = loraInfo.LoraLoaderModelOnly?.input?.required?.lora_name?.[0] || [];
       return Response.json({connected:true,device:stats.devices?.[0]?.name || 'RunPod GPU',turboReady:lora.includes(p.mode==='r2v'?'minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors':'minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors')});
     }
+    if (p.action === 'cancel_batches') {
+      if (!Array.isArray(p.batch_ids) || !p.batch_ids.length || p.batch_ids.length > 100 ||
+        p.batch_ids.some((id: unknown) => typeof id !== 'string' || !/^[a-zA-Z0-9-]+$/.test(id))) {
+        throw new Error('Choose 1–100 valid batches to cancel.');
+      }
+      const batches = new Set<string>(p.batch_ids);
+      const belongs = (item: any) => batches.has(item[3]?.pocket_batch_id);
+      const queue = await jsonUp(base, '/queue');
+      const targets = [...(queue.queue_pending || []), ...(queue.queue_running || [])].filter(belongs);
+      if (targets.length) {
+        const deleted = await upstream(base, '/queue', {method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({delete:targets.map((item: any) => item[1])})});
+        if (!deleted.ok) throw new Error('Could not remove the selected batches from RunPod.');
+      }
+      const afterDelete = await jsonUp(base, '/queue');
+      for (const item of (afterDelete.queue_running || []).filter(belongs)) {
+        const stopped = await upstream(base, '/interrupt', {method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({prompt_id:item[1]})});
+        if (!stopped.ok) throw new Error('Pending shots were removed. The running shot still needs cancellation.');
+      }
+      const [remaining, history] = await Promise.all([
+        jsonUp(base, '/queue'), jsonUp(base, '/history?max_items=500'),
+      ]);
+      const items = new Map<string, any>();
+      for (const [id, entry] of Object.entries(history) as [string, any][]) {
+        const metadata = entry.prompt?.[3];
+        if (batches.has(metadata?.pocket_batch_id) && entry.status?.completed && entry.status?.status_str !== 'error') {
+          items.set(id, {id, batchId:metadata.pocket_batch_id, index:Number(metadata.pocket_item_index),
+            state:'complete', files:videoFiles(entry), ...historyTiming(entry)});
+        }
+      }
+      for (const [state, entries] of [['queued', remaining.queue_pending || []], ['running', remaining.queue_running || []]] as const) {
+        for (const item of entries.filter(belongs)) {
+          items.set(item[1], {id:item[1], batchId:item[3].pocket_batch_id, index:Number(item[3].pocket_item_index), state});
+        }
+      }
+      return Response.json({batch_ids:[...batches], items:[...items.values()]}, {headers:{'Cache-Control':'no-store'}});
+    }
     if (p.action === 'bulk' || p.action === 'recover_batch' || p.action === 'statuses') {
       const [history,queue]=await Promise.all([jsonUp(base,'/history?max_items=500'),jsonUp(base,'/queue')]);
       const queued=[...(queue.queue_running||[]),...(queue.queue_pending||[])];
