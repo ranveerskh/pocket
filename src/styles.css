@@ -429,3 +429,33 @@
 .local-studio-shell .gallery-list .tile-caption{grid-column:2;grid-row:1}
 .local-studio-shell .media-poster>:is(img,video){position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
 @media(max-width:650px){.local-studio-shell .gallery-list .gallery-tile>.media-poster{width:110px;height:116px}}
+
+/* Keep Preview labels inside their Local scene cards, below the sticky toolbar. */
+.local-studio-shell .workspace-shot{position:relative;isolation:isolate;z-index:0}
+.local-studio-shell .shot-preview-button{isolation:isolate;z-index:0}
+.local-studio-shell .workspace-filters{z-index:5}
+/* Shared RunPod/PC player: scene navigation and save stay within reach. */
+.workspace-player-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;flex-wrap:wrap}
+.workspace-player-title{display:flex;align-items:center;gap:10px;min-width:0}
+.workspace-player-title small{color:var(--muted);white-space:nowrap}
+.workspace-player-controls{display:flex;align-items:center;gap:6px;margin-left:auto}
+.workspace-player-controls .icon-button{min-width:42px;min-height:42px}
+.workspace-player-controls .player-save{min-height:42px;padding:8px 14px}
+.workspace-shot.is-playing{outline:2px solid var(--accent);outline-offset:2px}
+.shot-save{justify-self:start;min-height:36px;gap:5px}
+@media(max-width:800px){
+ .local-studio-shell .workspace-filters{align-items:center}
+ .local-studio-shell .workspace-filters input{min-width:100px;flex:1}
+ .local-studio-shell .project-workspace-header{flex-wrap:wrap}
+ .local-studio-shell .workspace-composer.composer-mobile-open{bottom:calc(115px + env(safe-area-inset-bottom));max-height:calc(100dvh - 160px)}
+ .workspace-player-toolbar{gap:6px;padding:8px}
+ .workspace-player-title{font-size:13px;gap:6px}
+ .workspace-player-controls{gap:3px}
+ .workspace-player-controls .icon-button{min-width:36px;min-height:40px;padding:6px}
+ .workspace-player-controls .player-save{padding:8px 10px}
+}
+
+.save-feedback{font-size:11px;color:var(--muted)}
+.workspace-player-controls>.save-feedback{position:absolute;top:100%;right:12px;background:var(--panel);padding:4px 8px;border-radius:6px}
+
+.local-save-backdrop{z-index:10020}

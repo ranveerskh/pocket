@@ -11,6 +11,8 @@
     "build": "tsc --noEmit && vite build && node scripts/build-offline.mjs",
     "preview": "vite preview",
     "test": "node scripts/check-workflows.mjs && node scripts/check-gallery.mjs && node scripts/check-device.mjs && node scripts/check-gallery-actions.mjs && node scripts/check-bulk-cancel.mjs && node --experimental-strip-types scripts/check-device-sync.mjs && python3 scripts/check-storage-helper.py",
+    "test:local-models": "node scripts/check-local.mjs && node scripts/check-qwen-turbo.mjs",
+    "test:workspace": "node scripts/check-workspace-focus.mjs && node scripts/check-media-poster.mjs && node scripts/check-file-export.mjs",
     "test:sync-local": "node --experimental-strip-types scripts/check-local-sync.mjs && node scripts/check-device-pairing.mjs"
   },
   "dependencies": {

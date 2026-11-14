@@ -296,3 +296,17 @@ The pairing endpoint uses a five-minute, one-time invitation with owner approval
 Local Phone & PC Sync mirrors project/category names, moves and removals, reference additions/removals, and Hide/Unhide. Removed projects move their creations to Unfiled; removing a saved reference does not delete the original PC input file. Deletion markers prevent an offline device from bringing removed projects or references back. Device-only media deletion remains device-only.
 
 Hidden metadata stays in the encrypted sync room. Each device must set or unlock its own Hidden-folder PIN to open synced hidden items; they are excluded from the normal gallery while locked. Local saved media is encrypted when Hidden is unlocked and the item is imported. Existing Photos/Files exports are separate. Sync runs while the app is open; PC media playback requires the PC and Tailscale online.
+
+### Prepared workspace/player improvements (unreleased)
+
+The Local version now uses an overlay player with Previous/Next, a persistent Save control and a return to the current scene card on close. Navigation includes completed scenes beyond the current page and follows the selected scene sort. Scene cards have their own Save action. Sort, grid/list choices, submission focus and lazy thumbnail recovery are enabled on Local. RunPod player/save changes remain unpublished.
+
+Ready device files open the phone native share sheet directly from Save; PC Save starts a download directly. Files that need fetching show preparation, then attempt the same export. Browsers that require a fresh gesture offer the explicit share/download panel. iOS still requires its own Save Video/Save to Files action. Cancelling preparation does not export the file later. Project ZIP export keeps its existing flow.
+
+Validation: `npm run test:workspace`, `npm run build`, `npm test`. Local-only release; RunPod changes remain on hold.
+
+### Prepared Local Qwen 2.1 Turbo integration (unreleased)
+
+The supplied API JSON is the INT8 Turbo workflow, not a GGUF model. In Local Qwen settings choose Standard (existing 25-step graph) or Turbo (exact supplied 8-step manual sigmas, Euler, CFG 1). Prompt, frame size and per-item seeds are mapped for single and bulk. Turbo keeps negative conditioning empty and omits the disabled prompt enhancer branch and its extra 9B encoder. Its diffusion model is `qwen_image_2.1_turbo_int8_convrot.safetensors`; the existing Qwen 8B INT8 text encoder and Qwen 2.1 VAE are still required. Connection checks validate the actual selected graph. Saved jobs, reuse and timing buckets distinguish Standard from Turbo.
+
+Validation: `npm run test:local-models`. Mocked integration only; no claim of measured speed or successful rendering on a 6GB GPU. RunPod Qwen continues using its existing graph. Local integration is released independently; RunPod changes remain on hold.

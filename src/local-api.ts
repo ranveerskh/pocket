@@ -1,11 +1,23 @@
 
 import {videoFiles,historyTiming,makeWorkflow as originalWorkflow} from '../server/comfy.ts';
 import localImage from './local-image-workflow.json';
+import localQwenTurbo from './local-qwen-turbo-workflow.json';
 import {localBase} from './local-mode';
 const runpodURL=localBase;
 const upstream=(base:string,path:string,init:RequestInit={})=>fetch(localBase(base)+path,{...init,redirect:'error'});
 async function jsonUp(base:string,path:string,init:RequestInit={}) { const r=await upstream(base,path,init); const d=await r.json(); if(!r.ok||d.error) throw new Error(JSON.stringify(d.node_errors||d.error||`ComfyUI HTTP ${r.status}`)); return d; }
-function makeWorkflow(p:any):Record<string,any> { if(p.mode==='r2v') { const graph=originalWorkflow(p) as Record<string,any>; graph['119'].inputs.vae_name='minimax_h3_video_vae_int8_convrot.safetensors'; Object.assign(graph['130'].inputs,{color_space:'sRGB',chroma_subsampling:'auto',codec:'none'}); graph['92'].inputs['format.codec']='auto'; return graph; } if(p.mode!=='image')return originalWorkflow(p); const graph=structuredClone(localImage) as Record<string,any>; const generated=originalWorkflow(p) as Record<string,any>; graph['57:27'].inputs.text=generated['57:27'].inputs.text; graph['57:13'].inputs.width=generated['57:13'].inputs.width; graph['57:13'].inputs.height=generated['57:13'].inputs.height; graph['57:3'].inputs.seed=generated['57:3'].inputs.seed; graph['9'].inputs.filename_prefix='image/PocketStudio'; return graph; }
+function makeWorkflow(p:any):Record<string,any> {
+ if(p.mode==='qwen'&&p.qwenTurbo===true){
+  if(p.negativePrompt?.trim()||(p.guidance!==undefined&&p.guidance!==1))throw new Error('Qwen 2.1 Turbo uses CFG 1 without a negative prompt.');
+  const reference=originalWorkflow({...p,guidance:1,negativePrompt:''}) as Record<string,any>;
+  const graph=structuredClone(localQwenTurbo) as Record<string,any>;
+  graph['459:452'].inputs.prompt=reference['459:452'].inputs.prompt;
+  graph['459:456'].inputs.width=reference['459:456'].inputs.width;
+  graph['459:456'].inputs.height=reference['459:456'].inputs.height;
+  graph['459:488'].inputs.noise_seed=reference['459:458'].inputs.seed;
+  return graph;
+ }
+ if(p.mode==='r2v') { const graph=originalWorkflow(p) as Record<string,any>; graph['119'].inputs.vae_name='minimax_h3_video_vae_int8_convrot.safetensors'; Object.assign(graph['130'].inputs,{color_space:'sRGB',chroma_subsampling:'auto',codec:'none'}); graph['92'].inputs['format.codec']='auto'; return graph; } if(p.mode!=='image')return originalWorkflow(p); const graph=structuredClone(localImage) as Record<string,any>; const generated=originalWorkflow(p) as Record<string,any>; graph['57:27'].inputs.text=generated['57:27'].inputs.text; graph['57:13'].inputs.width=generated['57:13'].inputs.width; graph['57:13'].inputs.height=generated['57:13'].inputs.height; graph['57:3'].inputs.seed=generated['57:3'].inputs.seed; graph['9'].inputs.filename_prefix='image/PocketStudio'; return graph; }
 export default async function comfy(req: Request) {
   try {
     if (req.headers.get('origin') && req.headers.get('origin') !== new URL(req.url).origin) return Response.json({error:'Cross-site request rejected.'},{status:403});
@@ -24,13 +36,13 @@ export default async function comfy(req: Request) {
     if(['storage_status','storage_plan','storage_delete'].includes(p.action))throw new Error('Deleting files on the PC from Pocket Studio is not supported. Use the ComfyUI output folder.');
     if (p.action === 'connect') {
       const stats = await jsonUp(base,'/system_stats');
-      const types = [...new Set(Object.values(makeWorkflow({prompt:'Connection check',duration:5,seed:1,quality:'draft',aspect:'landscape',mode:p.mode,custom:p.custom,preflight:true})).map((n: any)=>n.class_type))];
+      const types = [...new Set(Object.values(makeWorkflow({prompt:'Connection check',duration:5,seed:1,quality:'draft',aspect:'landscape',mode:p.mode,qwenTurbo:p.qwenTurbo,custom:p.custom,preflight:true})).map((n: any)=>n.class_type))];
       if(p.mode==='r2v')for(const type of ['LoadImage','LoadAudio'])if(!types.includes(type))types.push(type);
       if(types.length>100) throw new Error('This connection check supports up to 100 different node types.');
       const checked = await Promise.all(types.map(async type => { const info = await jsonUp(base,'/object_info/'+encodeURIComponent(type)); return {type,info:info[type]}; }));
       const missing = checked.filter(x=>!x.info).map(x=>x.type);
       if (missing.length) throw new Error('This pod is missing workflow nodes: '+missing.join(', ')+'. Open the selected workflow in ComfyUI and install its requirements.');
-      const graph = makeWorkflow({prompt:'Connection check',duration:5,seed:1,quality:'draft',aspect:'landscape',mode:p.mode,custom:p.custom,preflight:true});
+      const graph = makeWorkflow({prompt:'Connection check',duration:5,seed:1,quality:'draft',aspect:'landscape',mode:p.mode,qwenTurbo:p.qwenTurbo,custom:p.custom,preflight:true});
       const needed = Object.values(graph).flatMap((node:any) => ['UNETLoader','CLIPLoader','VAELoader'].includes(node.class_type) ? Object.entries(node.inputs).filter(([key])=>['unet_name','clip_name','vae_name'].includes(key)).map(([key,name])=>[node.class_type,key,name]) : []);
       const missingModels = needed.filter(([type,key,name]) => { const info = checked.find(x=>x.type===type)?.info; const options = info?.input?.required?.[key]?.[0]; return Array.isArray(options) && !options.includes(name); }).map(x=>x[2]);
       if(missingModels.length) throw new Error('Missing model files: '+missingModels.join(', '));

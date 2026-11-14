@@ -1,0 +1,14 @@
+import fs from 'node:fs';import vm from 'node:vm';import ts from 'typescript';import assert from 'node:assert/strict';
+let clicks=0,removed=0,shares=0,shareError,downloadName,revokes=0;const timers=[];
+const navigator={userAgent:'iPhone',maxTouchPoints:5,canShare:()=>true,share:async()=>{shares++;if(shareError)throw shareError;}};
+const scope={exports:{},navigator,URL:{createObjectURL:()=> 'blob:file',revokeObjectURL:()=>revokes++},document:{body:{append:()=>{}},createElement:()=>({set download(value){downloadName=value;},click:()=>clicks++,remove:()=>removed++})},setTimeout:fn=>timers.push(fn)};
+vm.runInNewContext(ts.transpile(fs.readFileSync('src/file-export.ts','utf8'),{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}),scope);
+const {exportFile,prefersNativeSave}=scope.exports;
+const file=new File(['video'],'Scene_01.mp4',{type:'video/mp4'});
+assert.equal(prefersNativeSave(),true);
+const first=exportFile(file);assert.equal(shares,1,'Native share runs immediately in the original tap before any await');assert.equal(await first,'shared');assert.equal(clicks,0);
+shareError=Object.assign(new Error('Denied'),{name:'NotAllowedError'});assert.equal(await exportFile(file),'needs-tap');assert.equal(clicks,0,'Blocked iOS share offers explicit retry rather than an unexpected download');
+shareError=Object.assign(new Error('Cancelled'),{name:'AbortError'});assert.equal(await exportFile(file),'cancelled');assert.equal(clicks,0);
+shareError=undefined;navigator.userAgent='Windows';assert.equal(await exportFile(file),'downloaded');assert.equal(clicks,1);assert.equal(downloadName,'Scene_01.mp4');assert.equal(removed,1);assert.equal(revokes,0);timers.shift()();assert.equal(revokes,1);
+navigator.userAgent='iPhone';navigator.canShare=()=>false;assert.equal(await exportFile(file),'downloaded');assert.equal(clicks,2);
+console.log('Save flow verified: immediate iPhone share, cancellation, denied gesture fallback, direct PC download, native-share-unavailable fallback and deferred blob cleanup.');
