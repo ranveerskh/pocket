@@ -13,6 +13,6 @@ const job={id:'one',base:'https://pc.tail123.ts.net',mode:'image',files:[{filena
 let h=setup();let tree=h.render(job);assert.equal(tree.props.children.type,'img');assert.equal(tree.props.children.props.src,job.base+'/view?filename=photo.png');assert.equal(h.reads,0,'Remote fallback must not download full files to build thumbnails');
 h=setup();tree=h.render({...job,mode:'video',files:[{filename:'clip.mp4'}]});assert.equal(tree.props.children.type,'video');assert.equal(tree.props.children.props.preload,'metadata');assert.equal(tree.props.children.props.playsInline,true);assert.equal(tree.props.children.props.autoPlay,undefined);
 h=setup();tree=h.render({...job,files:[{filename:'photo.png',podDeleted:true}]});assert.notEqual(tree.props.children.type,'img');
-h=setup({local:false});tree=h.render(job);assert.notEqual(tree.props.children.type,'img','RunPod posters retain their published behavior');
+h=setup({local:false});tree=h.render(job);assert.equal(tree.props.children.type,'img','RunPod receives the same lazy remote poster recovery');
 h=setup({saved:true,read:async()=>new Blob(['image'],{type:'image/png'})});h.render(job);await new Promise(resolve=>setImmediate(resolve));tree=h.render(job);assert.equal(tree.props.children.props.src,'blob:saved');
 console.log('Poster checks passed: visible PC image fallback without full-file copying, inline metadata-only video, deleted-file exclusion, RunPod poster recovery and saved-image preference.');

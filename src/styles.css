@@ -150,7 +150,7 @@
   padding: 0 0 10px;
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 5;
   background: var(--bg);
 }
 .workspace-filters button, .composer-modes button {
@@ -163,7 +163,7 @@
 }
 .workspace-filters button[aria-pressed=true], .composer-modes button[aria-pressed=true] { color: var(--accent); border-color: #7861a8; }
 .workspace-shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 205px), 1fr)); gap: 10px; }
-.workspace-shot { overflow: hidden; scroll-margin-top: 54px; }
+.workspace-shot { position: relative; isolation: isolate; z-index: 0; overflow: hidden; scroll-margin-top: 54px; }
 .workspace-shot-body { display: grid; gap: 6px; padding: 11px; }
 .workspace-shot-body p { margin: 0; color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shot-progress { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
@@ -171,6 +171,8 @@
 .shot-progress small { color: #f2afbb; overflow-wrap: anywhere; }
 .shot-preview-button {
   position: relative;
+  isolation: isolate;
+  z-index: 0;
   width: 100%;
   display: grid;
   place-items: center;
@@ -402,10 +404,10 @@
 .local-scene-grid[data-columns="1"]{grid-template-columns:minmax(0,1fr)}
 .local-scene-grid[data-columns="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}
 .local-scene-grid[data-columns="3"]{grid-template-columns:repeat(3,minmax(0,1fr))}
-.local-studio-shell .shot-preview-button{overflow:hidden;padding:0}
-.local-studio-shell .shot-preview-button>.media-poster{display:grid;place-items:center;inset:0;overflow:hidden}
-.local-studio-shell .shot-preview-button>.media-poster img{display:block;position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.local-studio-shell .shot-preview-label{position:relative;font-size:12px}
+.shot-preview-button{overflow:hidden;padding:0}
+.shot-preview-button>.media-poster{display:grid;place-items:center;inset:0;overflow:hidden}
+.shot-preview-button>.media-poster img{display:block;position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.shot-preview-label{position:relative;font-size:12px}
 .local-preview-backdrop{position:fixed;inset:0;z-index:10000;background:#000b;display:grid;place-items:center;padding:20px 14px max(100px,env(safe-area-inset-bottom));overflow:auto}
 .local-preview-dialog{width:min(900px,100%);max-height:100%;overflow:auto;margin:0;background:var(--panel);border-color:var(--line);color:var(--text)}
 .local-preview-dialog>img,.local-preview-dialog>video{width:100%;height:auto;min-height:120px;max-height:58dvh;object-fit:contain}
@@ -425,15 +427,11 @@
 }
 
 /* Manage list thumbnails occupy their own column instead of covering the card. */
-.local-studio-shell .gallery-list .gallery-tile>.media-poster{position:relative;inset:auto;grid-column:1;grid-row:1;width:180px;height:116px;min-height:116px;overflow:hidden}
-.local-studio-shell .gallery-list .tile-caption{grid-column:2;grid-row:1}
-.local-studio-shell .media-poster>:is(img,video){position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
-@media(max-width:650px){.local-studio-shell .gallery-list .gallery-tile>.media-poster{width:110px;height:116px}}
+.gallery-list .gallery-tile>.media-poster{position:relative;inset:auto;grid-column:1;grid-row:1;width:180px;height:116px;min-height:116px;overflow:hidden}
+.gallery-list .tile-caption{grid-column:2;grid-row:1}
+.media-poster>:is(img,video){position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
+@media(max-width:650px){.gallery-list .gallery-tile>.media-poster{width:110px;height:116px}}
 
-/* Keep Preview labels inside their Local scene cards, below the sticky toolbar. */
-.local-studio-shell .workspace-shot{position:relative;isolation:isolate;z-index:0}
-.local-studio-shell .shot-preview-button{isolation:isolate;z-index:0}
-.local-studio-shell .workspace-filters{z-index:5}
 /* Shared RunPod/PC player: scene navigation and save stay within reach. */
 .workspace-player-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;flex-wrap:wrap}
 .workspace-player-title{display:flex;align-items:center;gap:10px;min-width:0}
@@ -444,10 +442,10 @@
 .workspace-shot.is-playing{outline:2px solid var(--accent);outline-offset:2px}
 .shot-save{justify-self:start;min-height:36px;gap:5px}
 @media(max-width:800px){
- .local-studio-shell .workspace-filters{align-items:center}
- .local-studio-shell .workspace-filters input{min-width:100px;flex:1}
- .local-studio-shell .project-workspace-header{flex-wrap:wrap}
- .local-studio-shell .workspace-composer.composer-mobile-open{bottom:calc(115px + env(safe-area-inset-bottom));max-height:calc(100dvh - 160px)}
+ .studio-runpod-shell .workspace-filters{align-items:center}
+ .studio-runpod-shell .workspace-filters input{min-width:100px;flex:1}
+ .studio-runpod-shell .project-workspace-header{flex-wrap:wrap}
+ .studio-runpod-shell .workspace-composer.composer-mobile-open{bottom:calc(115px + env(safe-area-inset-bottom));max-height:calc(100dvh - 160px)}
  .workspace-player-toolbar{gap:6px;padding:8px}
  .workspace-player-title{font-size:13px;gap:6px}
  .workspace-player-controls{gap:3px}
@@ -458,4 +456,4 @@
 .save-feedback{font-size:11px;color:var(--muted)}
 .workspace-player-controls>.save-feedback{position:absolute;top:100%;right:12px;background:var(--panel);padding:4px 8px;border-radius:6px}
 
-.local-save-backdrop{z-index:10020}
+.download-backdrop{z-index:10020}

@@ -287,7 +287,7 @@ Open `/local` in the browser on the same laptop running ComfyUI. Start a compati
 
 On the device that already has the projects, open Settings → Phone & PC Sync. Use the PC's private HTTPS Tailscale Serve address and create a 4-digit code. On the other device, open the same site at `/local`, enter the code in Settings, then approve the request on the first device. Codes expire after five minutes and can be used once; established pairing is saved in each browser. Reopening the app does not ask for a code.
 
-Only project metadata, prompts, references and generation status are shared; video bytes stay on the PC. Both devices need their Tailscale connection and access to the same running PC ComfyUI to open the originals. Synchronization runs while the page is visible, shortly after edits and at ten-second intervals. Hidden records and device-only media are excluded. Existing loopback references are changed to the pairing's Tailscale address. Staging submissions are never shared or resubmitted by sync. Removing a device copy keeps the shared record, as in the RunPod sync behavior.
+Only project metadata, prompts, references and generation status are shared; video bytes stay on the PC. Both devices need their Tailscale connection and access to the same running PC ComfyUI to open the originals. Synchronization runs while the page is visible, shortly after edits and at ten-second intervals. Device-only media bytes are excluded; synced Local Hidden metadata remains encrypted and requires each device’s Hidden PIN to open. Existing loopback references are changed to the pairing's Tailscale address. Staging submissions are never shared or resubmitted by sync. Removing a device copy keeps the shared record, as in the RunPod sync behavior.
 
 The pairing endpoint uses a five-minute, one-time invitation with owner approval, rate limits, and an internal random secret for continued synchronization. The four digits are only an invitation code; they are not the encryption key.
 
@@ -297,16 +297,16 @@ Local Phone & PC Sync mirrors project/category names, moves and removals, refere
 
 Hidden metadata stays in the encrypted sync room. Each device must set or unlock its own Hidden-folder PIN to open synced hidden items; they are excluded from the normal gallery while locked. Local saved media is encrypted when Hidden is unlocked and the item is imported. Existing Photos/Files exports are separate. Sync runs while the app is open; PC media playback requires the PC and Tailscale online.
 
-### Prepared workspace/player improvements (unreleased)
+### Workspace/player improvements
 
-The Local version now uses an overlay player with Previous/Next, a persistent Save control and a return to the current scene card on close. Navigation includes completed scenes beyond the current page and follows the selected scene sort. Scene cards have their own Save action. Sort, grid/list choices, submission focus and lazy thumbnail recovery are enabled on Local. RunPod player/save changes remain unpublished.
+Both RunPod and Local now use an overlay player with Previous/Next, a persistent Save control and a return to the current scene card on close. Navigation includes completed scenes beyond the current page and follows the selected scene sort. Scene cards have their own Save action. Sort, grid/list choices, submission focus and lazy thumbnail recovery are shared across both app modes. Their settings remain independently stored.
 
 Ready device files open the phone native share sheet directly from Save; PC Save starts a download directly. Files that need fetching show preparation, then attempt the same export. Browsers that require a fresh gesture offer the explicit share/download panel. iOS still requires its own Save Video/Save to Files action. Cancelling preparation does not export the file later. Project ZIP export keeps its existing flow.
 
-Validation: `npm run test:workspace`, `npm run build`, `npm test`. Local-only release; RunPod changes remain on hold.
+Validation: `npm run test:workspace`, `npm run build`, `npm test`. Released for both Local and RunPod.
 
-### Prepared Local Qwen 2.1 Turbo integration (unreleased)
+### Local Qwen 2.1 Turbo integration
 
 The supplied API JSON is the INT8 Turbo workflow, not a GGUF model. In Local Qwen settings choose Standard (existing 25-step graph) or Turbo (exact supplied 8-step manual sigmas, Euler, CFG 1). Prompt, frame size and per-item seeds are mapped for single and bulk. Turbo keeps negative conditioning empty and omits the disabled prompt enhancer branch and its extra 9B encoder. Its diffusion model is `qwen_image_2.1_turbo_int8_convrot.safetensors`; the existing Qwen 8B INT8 text encoder and Qwen 2.1 VAE are still required. Connection checks validate the actual selected graph. Saved jobs, reuse and timing buckets distinguish Standard from Turbo.
 
-Validation: `npm run test:local-models`. Mocked integration only; no claim of measured speed or successful rendering on a 6GB GPU. RunPod Qwen continues using its existing graph. Local integration is released independently; RunPod changes remain on hold.
+Validation: `npm run test:local-models`. Mocked integration only; no claim of measured speed or successful rendering on a 6GB GPU. RunPod Qwen continues using its existing graph. The Local Turbo integration is released; RunPod Qwen continues using its existing standard graph.

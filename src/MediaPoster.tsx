@@ -2,7 +2,6 @@ import {useEffect, useRef, useState} from 'react';
 import {Film, Image as ImageIcon} from 'lucide-react';
 import {useDeviceMedia} from './LocalMedia';
 import {mediaKey,remoteMediaURL} from './media-db';
-import {isLocal} from './local-mode';
 import type {Job} from './vault';
 
 let posterQueue: Promise<void> = Promise.resolve();
@@ -66,7 +65,7 @@ export default function MediaPoster({job}: {job: Job}) {
 
   useEffect(() => {
     if (!visible || !file) return;
-    const remote=isLocal&&job.base&&!file.podDeleted?remoteMediaURL(job.base,file):'';
+    const remote=job.base&&!file.podDeleted?remoteMediaURL(job.base,file):'';
     if(!saved){setFallback(remote);return;}
     setFallback('');
     let gone = false;
@@ -81,7 +80,7 @@ export default function MediaPoster({job}: {job: Job}) {
         setPoster(url);
       } else {
         try{const thumbnail = await videoPoster(blob);if(!gone)setPoster(thumbnail);}
-        catch{if(!gone&&isLocal){url=URL.createObjectURL(blob);setFallback(url);}}
+        catch{if(!gone){url=URL.createObjectURL(blob);setFallback(url);}}
       }
     }).catch(()=>{if(!gone)setFallback(remote);});
     return () => {

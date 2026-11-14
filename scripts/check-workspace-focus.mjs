@@ -37,7 +37,7 @@ assert.equal(h.storage.get('pocket-workspace-sort'),'newest');
 compose();h.render({...next,focusJobKey:undefined});const batch={...job,id:'pending-batch-0',batchId:'batch',batchIndex:0,state:'staging',created:200};h.render({...props,jobs:[batch,...next.jobs],bulk:true,busy:true});assert.ok(by(n=>n.props?.className==='workspace-composer composer-mobile-open'),'Bulk placeholders alone do not close the composer');const accepted={...batch,id:'accepted-batch-0',state:'queued'};h.render({...props,jobs:[accepted,...next.jobs],bulk:true,focusJobKey:'batch:0'});assert.equal(h.scrolls.at(-1),'shot-batch:0');assert.ok(!by(n=>n.props?.className==='workspace-composer composer-mobile-open'));
 console.log('Workspace focus verified: failed submission stays open, successful submission closes and reveals its paginated card through search, one-time scroll, and persisted chronological sorting.');
 
-for(const local of [true]){
+for(const local of [true,false]){
  const view=harness(local);
  const clips=Array.from({length:30},(_,i)=>({id:'scene-'+i,prompt:'SCENE '+String(i+1).padStart(2,'0'),created:i+1,state:'complete',files:[{filename:i+'.mp4',subfolder:'video',type:'output'}]}));
  const project={...props,jobs:clips};view.render(project);
@@ -54,5 +54,3 @@ for(const local of [true]){
  assert.ok(find(n=>n.props?.id==='shot-scene-26'));assert.equal(view.scrolls.at(-1),'shot-scene-26','Close returns to current scene instead of the top');
  console.log((local?'Local':'RunPod')+' player navigation, shared sort/layout and return to paginated scene verified.');
 }
-
-const runpod=harness(false);runpod.render(props);assert.ok(!runpod.all().some(n=>n.props?.['aria-label']==='Sort scenes'));assert.ok(runpod.all().some(n=>n.props?.className==='button primary workspace-mobile-compose'));console.log('RunPod workspace stays on its published implementation.');

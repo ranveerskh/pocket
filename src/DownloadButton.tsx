@@ -1,4 +1,4 @@
-import {mediaURL as resolveMediaURL,isLocal} from './local-mode';
+import {mediaURL as resolveMediaURL} from './local-mode';
 import {useEffect,useRef,useState} from 'react';
 import {Download} from 'lucide-react';
 import type {Job,MediaFile} from './vault';
@@ -9,7 +9,7 @@ import SaveFileDialog from './SaveFileDialog';
 import {creationDownloadName} from './gallery-model';
 export function mediaURL(base:string,file:MediaFile,download=false){return resolveMediaURL(base,file,download);}
 export function fileType(name:string){return /\.mp4$|\.m4v$/i.test(name)?'video/mp4':/\.webm$/i.test(name)?'video/webm':/\.mov$/i.test(name)?'video/quicktime':/\.png$/i.test(name)?'image/png':/\.jpe?g$/i.test(name)?'image/jpeg':/\.webp$/i.test(name)?'image/webp':'application/octet-stream';}
-function LocalDownloadButton({job,file=job.files![0],className='download',label='Save'}:{job:Job;file?:MediaFile;className?:string;label?:string}){
+export default function DownloadButton({job,file=job.files![0],className='download',label='Save'}:{job:Job;file?:MediaFile;className?:string;label?:string}){
  const service=useDeviceMedia(),[open,setOpen]=useState(false),[loading,setLoading]=useState(false),[prepared,setPrepared]=useState<File|null>(null),[error,setError]=useState(''),[note,setNote]=useState('');
  const alive=useRef(true),inFlight=useRef(false),currentKey=useRef('');
  const key=mediaKey(job,file)+JSON.stringify([job.base,job.hidden]);currentKey.current=key;
@@ -37,11 +37,3 @@ function LocalDownloadButton({job,file=job.files![0],className='download',label=
  }
  return <><button className={className} disabled={loading} onClick={()=>void prepare()} aria-label="Save creation" title={note||'Save this file'}><Download size={15}/>{loading?'Preparing…':label}</button>{note&&<span className="save-feedback" role="status">{note}</span>}{open&&<SaveFileDialog title="Save file" file={prepared} loading={loading} error={error} onClose={()=>{cancelled.current=true;controller.current?.abort();setOpen(false);}}/>}</>;
 }
-
-function RunPodDownloadButton({job,file=job.files![0],className='download',label='Save to phone'}:{job:Job;file?:MediaFile;className?:string;label?:string}){
- const service=useDeviceMedia(),[open,setOpen]=useState(false),[loading,setLoading]=useState(false),[prepared,setPrepared]=useState<File|null>(null),[error,setError]=useState('');const alive=useRef(true);useEffect(()=>()=>{alive.current=false;},[]);
- async function prepare(){setOpen(true);setError('');setLoading(true);try{const blob=await service.ensure(job,file);if(alive.current)setPrepared(new File([blob],creationDownloadName(job,file.filename),{type:fileType(file.filename)==='application/octet-stream'?blob.type:fileType(file.filename)}));}catch(e){if(alive.current)setError((e as Error).message);}finally{if(alive.current)setLoading(false);}}
- return <><button className={className} onClick={prepare} aria-label="Save creation to phone"><Download size={15}/>{label}</button>{open&&<SaveFileDialog file={prepared} loading={loading} error={error} onClose={()=>setOpen(false)}/>}</>;
-}
-
-export default isLocal?LocalDownloadButton:RunPodDownloadButton;
