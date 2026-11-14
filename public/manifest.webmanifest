@@ -1,13 +1,24 @@
 {
-  "name": "Pocket Studio",
-  "short_name": "Pocket Studio",
+  "name": "Pocket Studio RunPod",
+  "short_name": "PS RunPod",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "theme_color": "#111214",
   "background_color": "#111214",
   "icons": [
-    {"src":"/pocket-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
-    {"src":"/pocket-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
-  ]
+    {
+      "src": "/ps-runpod-v1-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/ps-runpod-v1-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "id": "/"
 }
