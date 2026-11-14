@@ -320,3 +320,9 @@ Settings → Storage → Cleanup guide contains copyable RunPod Bash and Windows
 Settings → Storage → Erase all data from this device requires typing ERASE. It unmounts Studio, pauses same-mode tabs, prevents late sync/storage writes, closes databases, removes the current mode's IndexedDB media/folder permission database and browser metadata/settings/pairing/Hidden vault, then offers a clean restart. Local and RunPod namespaces are separate; exports, server originals, the shared sync room, other browsers/devices and running ComfyUI jobs are kept. A blocked database asks users to close other tabs and retry. Stored export-folder permissions are now separately scoped for Local and RunPod; reselect the Local folder once if needed.
 
 Validation: `npm run test:device-cleanup` tests device-only partial failures, deduplication, deletion suppression, mode isolation, blocked database retry and Bash commands against disposable fixtures including symlink/input/model preservation. PowerShell commands require a real Windows smoke test. No user data was erased during development.
+
+
+## Optional AI prompt improvement
+Settings → AI prompt assistant accepts an OpenAI API key and checks GPT-6 Luna access. Improve prompt is hidden until setup is confirmed. Each request sends only the current prompt and generation settings/reference names, without images, voice media, connection URLs, or conversation history. Review the result before using it; generation remains manual.
+
+The Netlify prompt-assistant function stores credentials encrypted with AES-GCM; the browser holds a random access token, excluded from project sync/ZIP exports. Removing the key deletes its server record. Configure each browser separately. Monthly USD usage estimates are saved only on this browser and are not the OpenAI invoice. The current rates are $0.10 input, $0.01 cached input and $0.50 output per million tokens. Netlify Functions and Blobs must be enabled.
