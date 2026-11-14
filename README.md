@@ -233,13 +233,13 @@ Validation: TypeScript/production build; existing workflow/bulk/API regressions;
 
 ## Version 8: deletion destinations and bulk Pod relinking
 
-Single-item Delete and selected-item Delete open the same three-choice prompt: **Delete From Device**, **Delete From Pod**, and **Delete Both**. Device deletion keeps Pod files; Pod deletion keeps gallery records and device files. Both performs Pod deletion first and preserves device files if the Pod step fails. Imported projects without a Pod source can use Device deletion. Exported Photos/Files copies are never affected.
+Historical v8 behavior (replaced by device-only deletion below): single-item Delete and selected-item Delete opened a three-choice prompt: **Delete From Device**, **Delete From Pod**, and **Delete Both**. Device deletion keeps Pod files; Pod deletion keeps gallery records and device files. Both performs Pod deletion first and preserves device files if the Pod step fails. Imported projects without a Pod source can use Device deletion. Exported Photos/Files copies are never affected.
 
 Select items now offers **Find on current pod** and **Delete**. Bulk Find probes every recorded file of each selected creation, updates a creation's Pod link only when all its files are found, keeps failed records unchanged, and reports per-item results. It does not enumerate or import another user's Pod history. Selected items remain selected after Find so they can be deleted together.
 
 ### One-time Pod storage helper installation
 
-Stock ComfyUI history/userdata deletion is not physical output-file deletion. Pod/Both therefore require the included ComfyUI custom-node helper, installed once per ComfyUI installation and protected with its own random bearer key. The app's Pod delete panel includes **Storage setup** with this command:
+Stock ComfyUI history/userdata deletion is not physical output-file deletion. Pod/Both therefore require the included ComfyUI custom-node helper, installed once per ComfyUI installation and protected with its own random bearer key. The old Pod delete panel used this helper setup command (the current app does not offer Pod deletion or ask for a storage key):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ranveerskh/pocket/main/runpod/install-storage-helper.py -o /tmp/pocket-storage-setup.py && python3 /tmp/pocket-storage-setup.py --comfy /workspace/runpod-slim/ComfyUI
@@ -310,3 +310,13 @@ Validation: `npm run test:workspace`, `npm run build`, `npm test`. Released for 
 The supplied API JSON is the INT8 Turbo workflow, not a GGUF model. In Local Qwen settings choose Standard (existing 25-step graph) or Turbo (exact supplied 8-step manual sigmas, Euler, CFG 1). Prompt, frame size and per-item seeds are mapped for single and bulk. Turbo keeps negative conditioning empty and omits the disabled prompt enhancer branch and its extra 9B encoder. Its diffusion model is `qwen_image_2.1_turbo_int8_convrot.safetensors`; the existing Qwen 8B INT8 text encoder and Qwen 2.1 VAE are still required. Connection checks validate the actual selected graph. Saved jobs, reuse and timing buckets distinguish Standard from Turbo.
 
 Validation: `npm run test:local-models`. Mocked integration only; no claim of measured speed or successful rendering on a 6GB GPU. RunPod Qwen continues using its existing graph. The Local Turbo integration is released; RunPod Qwen continues using its existing standard graph.
+
+## Device-only Delete, Erase All, and terminal cleanup
+
+Single and bulk Delete now only remove the current browser's gallery records and app media copies. No Pod/PC delete destination, storage key, helper installation or remote deletion request is offered. Successful device deletions are remembered so sync cannot immediately restore deleted Hidden items on that browser; other devices and shared records are kept.
+
+Settings → Storage → Cleanup guide contains copyable RunPod Bash and Windows PC PowerShell commands: inspect media/size, find/delete one exact filename, or confirm clearing generated media under the configured ComfyUI output folder. Models and reference/input uploads are outside the cleanup target. Windows defaults to ComfyUI Desktop's shared output directory; Portable paths can be substituted. Finish generations and verify an actual readable device copy or export first; synced metadata is not a media backup. The guide does not execute commands remotely.
+
+Settings → Storage → Erase all data from this device requires typing ERASE. It unmounts Studio, pauses same-mode tabs, prevents late sync/storage writes, closes databases, removes the current mode's IndexedDB media/folder permission database and browser metadata/settings/pairing/Hidden vault, then offers a clean restart. Local and RunPod namespaces are separate; exports, server originals, the shared sync room, other browsers/devices and running ComfyUI jobs are kept. A blocked database asks users to close other tabs and retry. Stored export-folder permissions are now separately scoped for Local and RunPod; reselect the Local folder once if needed.
+
+Validation: `npm run test:device-cleanup` tests device-only partial failures, deduplication, deletion suppression, mode isolation, blocked database retry and Bash commands against disposable fixtures including symlink/input/model preservation. PowerShell commands require a real Windows smoke test. No user data was erased during development.

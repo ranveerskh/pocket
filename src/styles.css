@@ -457,3 +457,5 @@
 .workspace-player-controls>.save-feedback{position:absolute;top:100%;right:12px;background:var(--panel);padding:4px 8px;border-radius:6px}
 
 .download-backdrop{z-index:10020}
+
+.cleanup-guide details{margin-top:16px}.cleanup-guide summary{cursor:pointer;font-weight:600}.cleanup-guide textarea{width:100%;min-height:220px;font:12px/1.6 monospace;white-space:pre;overflow:auto;margin:12px 0}.erase-device-panel{margin-top:20px}.erase-device-panel p{line-height:1.7}.erase-confirm{display:grid;gap:12px;margin-top:16px}

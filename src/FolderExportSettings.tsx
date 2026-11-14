@@ -1,3 +1,5 @@
+import {isLocal} from './local-mode';
+import {deviceResetting} from './reset-state';
 import {useEffect, useRef, useState} from 'react';
 import {FolderOpen, HardDrive} from 'lucide-react';
 import {creationDownloadName} from './gallery-model';
@@ -18,9 +20,9 @@ let database: Promise<IDBDatabase> | undefined;
 
 function openDatabase() {
   if (!database) database = new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open('pocket-folder-export', 1);
+    const request = indexedDB.open(isLocal?'pocket-local-folder-export':'pocket-folder-export', 1);
     request.onupgradeneeded = () => request.result.createObjectStore('settings');
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {request.result.onversionchange=()=>{request.result.close();database=undefined;};resolve(request.result);};
     request.onerror = () => reject(request.error);
   }).catch(error => {
     database = undefined;
@@ -33,12 +35,13 @@ async function readConfig(): Promise<FolderConfig | undefined> {
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
     const request = db.transaction('settings').objectStore('settings').get('folder');
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {request.result.onversionchange=()=>{request.result.close();database=undefined;};resolve(request.result);};
     request.onerror = () => reject(request.error);
   });
 }
 
 async function saveConfig(config?: FolderConfig) {
+  if(deviceResetting)throw new Error('Device reset in progress.');
   const db = await openDatabase();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction('settings', 'readwrite');
@@ -200,3 +203,5 @@ export default function FolderExportSettings({service}: {service: ReturnType<typ
     </> : <p>Use Save file on a clip to export it. On iPhone, choose Save to Files from the share sheet. On a laptop with Chrome or Edge, you can choose an automatic export folder here.</p>}
   </section>;
 }
+
+export async function closeFolderExportDatabase(){if(database){try{(await database).close();}finally{database=undefined;}}}

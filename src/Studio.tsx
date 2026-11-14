@@ -5,6 +5,8 @@ import {useGalleryStore,type Job} from './vault';
 import Gallery from './Gallery';
 import ProjectWorkspace from './ProjectWorkspace';
 import DeviceStorage from './DeviceStorage';
+import CleanupGuide from './CleanupGuide';
+import EraseDeviceSettings from './EraseDeviceSettings';
 import DeviceSync, {useDeviceSync} from './DeviceSync';
 import ThemeSettings, {useTheme} from './ThemeSettings';
 import FolderExportSettings, {useFolderExport} from './FolderExportSettings';
@@ -304,6 +306,8 @@ export default function Studio(){
   <h2 className="settings-section-title">Storage</h2>
   <DeviceStorage vault={vault}/>
   <FolderExportSettings service={folderExport}/>
+  <CleanupGuide/>
+  <EraseDeviceSettings disabled={busy||refBusy||galleryBusy||bulkState.adding||!!localMedia.copying}/>
   <DeviceSync service={deviceSync}/>
  </section>}
  {(tab==='library'||tab==='private'&&privateOpen)&&<Gallery projectColumns={projectColumns} onBusy={setGalleryBusy} currentBase={base} key={tab+'-'+mediaProject} initialFolder={mediaProject||undefined} privateView={tab==='private'&&privateOpen} onClosePrivate={()=>{setPrivateOpen(false);setTab('library');void vault.lock().catch(e=>setMessage(e.message));}} vault={vault} busy={busy||!!active} onReuse={reuse} onReference={useAsReference} onCreate={openCreate} onOpenProject={mediaProject?undefined:openProject}/>}

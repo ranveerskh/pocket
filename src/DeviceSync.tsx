@@ -1,3 +1,5 @@
+import {readDeviceDeletions} from './device-deletions';
+import {deviceResetting} from './reset-state';
 import {localStorage,isLocal} from './local-mode';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {Copy, Link2, RefreshCw} from 'lucide-react';
@@ -46,7 +48,7 @@ export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOpt
   current.current = pairing;
 
   const sync = useCallback(async (request: Pairing, mode: 'create' | 'join' | 'refresh') => {
-    if (inFlight.current || !live.current.loaded || live.current.legacyLocked) return false;
+    if (deviceResetting || inFlight.current || !live.current.loaded || live.current.legacyLocked) return false;
     inFlight.current = true;
     setBusy(true);
     setError('');
@@ -79,6 +81,7 @@ export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOpt
         const local=isLocal?{...original,...canonicalLocalData(original,base)}:original;
         const rebased=isLocal&&(local.jobs.some((j,i)=>j.base!==original.jobs[i].base)||local.characters.some((c,i)=>c.base!==original.characters[i].base));
         const merged = await mergeSync(local, snapshot, request.seen,isLocal?'local':'runpod',base);
+        if(deviceResetting)return false;
         if (merged.changed || !etag) {
           const body = await sealSnapshot(merged.snapshot, key);
           if (body.length > 2_000_000) throw new Error('This library is too large for device sync.');
@@ -95,6 +98,7 @@ export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOpt
           snapshot = merged.snapshot;
         }
 
+        if(deviceResetting)return false;
         if (etag) cache.current = {code: request.code, etag, snapshot};
         const latest = live.current;
         const hasLocalUpdates = latest.jobs !== original.jobs || latest.folders !== original.folders || latest.characters !== original.characters || latest.locked !== original.locked || latest.protectedGallery !== original.protectedGallery;
@@ -103,6 +107,7 @@ export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOpt
           const data=isLocal?applyLocalSync(local,merged,local.protectedGallery&&!local.locked):{
             folders:mergeItems(local.folders,merged.incoming.folders),characters:mergeItems(local.characters,merged.incoming.characters),jobs:mergeItems(local.jobs,merged.incoming.jobs),
           };
+          const deviceDeleted=new Set(readDeviceDeletions());data.jobs=data.jobs.filter(job=>!deviceDeleted.has(job.id));
           if(isLocal&&local.protectedGallery&&!local.locked){
             for(const job of data.jobs){const previous=local.jobs.find(item=>item.id===job.id);if(previous?.hidden!==job.hidden)await options.current?.onVisibility(job,!!job.hidden);}
           }

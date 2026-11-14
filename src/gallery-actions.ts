@@ -8,3 +8,10 @@ export async function executeDeletion(items:DeleteItem[],scope:DeleteScope,opera
 export async function storageRequest(base:string,action:string,storageKey:string,extra:Record<string,unknown>={}){const r=await fetch('/api/comfy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({base,action,storageKey,...extra})});const d=await r.json().catch(()=>null);if(!r.ok||!d||d.error)throw new Error(d?.error||'Could not reach the Pod storage helper. No device copy was removed.');return d;}
 
 export async function verifyDeviceCopy(blob:Blob,sha256:string){if(!/^[a-f0-9]{64}$/.test(sha256))throw new Error('Pod returned an invalid file fingerprint. Nothing was deleted.');if(blob.size>256*1024*1024)throw new Error('This device copy is too large for in-app verification. Delete this file through Jupyter.');if(!crypto.subtle)throw new Error('File verification requires HTTPS. Open your Netlify HTTPS URL.');const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer())),n=>n.toString(16).padStart(2,'0')).join('');if(hash!==sha256)throw new Error('Pod file differs from this device copy. Nothing was deleted. Inspect the Pod file in Jupyter before deleting it.');}
+
+/** Device-only UI deletion deliberately has no server/Pod operation. */
+export async function deleteDeviceItems(ids:string[],remove:(id:string)=>Promise<void>,progress:(done:number,total:number)=>void){
+ const unique=[...new Set(ids)],results:ActionResult[]=[];
+ for(const id of unique){try{await remove(id);results.push({id,ok:true});}catch(error){results.push({id,ok:false,error:error instanceof Error?error.message:'Could not delete this device copy.'});}progress(results.length,unique.length);}
+ return results;
+}
