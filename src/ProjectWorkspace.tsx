@@ -184,7 +184,7 @@ export default function ProjectWorkspace(p: Props) {
 
   return <section className="project-workspace" aria-label="Project workspace">
     <header className="project-workspace-header">
-      <button className="button secondary" onClick={p.onProjects} disabled={p.busy}><ArrowLeft size={16}/>Projects</button>
+      <button className="button secondary workspace-back" aria-label="Back to projects" onClick={p.onProjects} disabled={p.busy}><ArrowLeft size={16}/><span>Projects</span></button>
       <label className="workspace-project-select">
         <span>Project</span>
         <select aria-label="Current project" value={p.folder} disabled={p.busy} onChange={e => p.onFolder(e.target.value)}>
@@ -196,8 +196,7 @@ export default function ProjectWorkspace(p: Props) {
         {running.length ? running.length + ' running' : 'Queue'} · {queue.length}
       </button>
       {<button className="button primary local-mobile-compose" onClick={compose}><Plus size={17}/>{p.bulk?'Bulk prompts':'Compose'}</button>}
-      {cancelCount>0&&<button className="button danger" disabled={p.bulkCancelBusy} onClick={()=>void p.onCancelBulk()}><Square size={14}/>{p.bulkCancelBusy?'Cancelling…':'Cancel all bulk · '+cancelCount}</button>}
-      <button className="button secondary workspace-manage" onClick={p.onManage} disabled={p.busy}>Manage media</button>
+      {cancelCount>0&&<button className="button danger workspace-cancel-all" disabled={p.bulkCancelBusy} onClick={()=>void p.onCancelBulk()}><Square size={14}/>{p.bulkCancelBusy?'Cancelling…':'Cancel all bulk · '+cancelCount}</button>}
     </header>
     {p.bulkCancelMessage&&<p className="bulk-cancel-note" role="status">{p.bulkCancelMessage}</p>}
     <div className={'project-workspace-columns' + (sidebar ? '' : ' sidebar-folded') + (showComposer ? '' : ' composer-folded')}>
@@ -213,13 +212,17 @@ export default function ProjectWorkspace(p: Props) {
       </aside>
       <div className="workspace-feed" ref={feed} onScroll={e => {if (filter === 'scenes') scrollPositions.set(p.folder, {top: e.currentTarget.scrollTop, limit});}}>
         <div className="workspace-filters" aria-label="Project view">
+         <div className="workspace-view-tabs" role="group" aria-label="Scene views">
           <button aria-pressed={filter === 'scenes'} onClick={() => {setFilter('scenes'); setLimit(PAGE_SIZE);}}>Scenes</button>
-          <button aria-pressed={filter === 'queue'} onClick={() => {setFilter('queue'); setLimit(PAGE_SIZE);}}>Queue {queue.length || ''}</button>
-          {failed.length > 0 && <button aria-pressed={filter === 'failed'} onClick={() => {setFilter('failed'); setLimit(PAGE_SIZE);}}>Failed / stopped {failed.length}</button>}
+          <button aria-pressed={filter === 'queue'} onClick={() => {setFilter('queue'); setLimit(PAGE_SIZE);}}>Queue {queue.length>0&&<span className="workspace-tab-count">{queue.length}</span>}</button>
+          {failed.length > 0 && <button aria-pressed={filter === 'failed'} onClick={() => {setFilter('failed'); setLimit(PAGE_SIZE);}} title="Failed and stopped scenes">Failed <span className="workspace-tab-count">{failed.length}</span></button>}
           <button className="workspace-mobile-manage" onClick={p.onManage} disabled={p.busy}>Manage</button>
+         </div>
+         <div className="workspace-view-tools">
           {<label className="local-scene-layout">Sort<select aria-label="Sort scenes" value={sort} onChange={e=>{const next=e.target.value as GallerySort;setSort(next);setLimit(PAGE_SIZE);try{localStorage.setItem('pocket-workspace-sort',next);}catch{}}}><option value="scene">Scene order</option><option value="oldest">Oldest first</option><option value="newest">Newest first</option></select></label>}
           {<label className="local-scene-layout">Layout<select aria-label="Scene layout" value={sceneColumns} onChange={e=>{setSceneColumns(e.target.value);try{localStorage.setItem('pocket-scene-columns',e.target.value);}catch{}}}><option value="auto">Auto</option><option value="1">List</option><option value="2">2 columns</option><option value="3">3 columns</option></select></label>}
           <input type="search" aria-label="Find a scene" placeholder="Find a scene…" value={search} onChange={e => {setSearch(e.target.value);setLimit(PAGE_SIZE);}}/>
+         </div>
         </div>
         {p.connectionNote && queue.length > 0 && <p className="workspace-note" role="status">{p.connectionNote}</p>}
         {needsRecovery && <button className="button secondary" onClick={p.onRecover} disabled={p.recovering || p.busy}>

@@ -459,3 +459,40 @@
 .download-backdrop{z-index:10020}
 
 .cleanup-guide details{margin-top:16px}.cleanup-guide summary{cursor:pointer;font-weight:600}.cleanup-guide textarea{width:100%;min-height:220px;font:12px/1.6 monospace;white-space:pre;overflow:auto;margin:12px 0}.erase-device-panel{margin-top:20px}.erase-device-panel p{line-height:1.7}.erase-confirm{display:grid;gap:12px;margin-top:16px}
+
+/* Workspace toolbar: project actions, view tabs, then search and display options. */
+.project-workspace-header{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.project-workspace-header .workspace-project-select{min-width:140px}
+.project-workspace-header .workspace-project-select select{max-width:460px;min-height:42px}
+.project-workspace-header .local-mobile-compose{display:inline-flex;margin-left:0;gap:7px;min-height:42px;padding:10px 18px;font-weight:650;white-space:nowrap}
+:root .project-workspace-header .local-mobile-compose{background:var(--accent);color:var(--bg);border:1px solid var(--accent);box-shadow:0 3px 12px #0002}
+.project-workspace-header .workspace-queue-link{background:transparent;font-size:12px;color:var(--muted);min-height:38px;border-color:transparent;white-space:nowrap}
+.project-workspace-header .workspace-cancel-all{font-size:12px;min-height:38px}
+.workspace-filters{display:flex;flex-direction:column;align-items:stretch!important;gap:10px;padding:8px 0 12px}
+.workspace-view-tabs{display:flex;align-items:center;gap:4px;padding:4px;border:1px solid var(--line);border-radius:12px;background:var(--panel);width:fit-content;max-width:100%}
+.workspace-view-tabs button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;border-color:transparent;background:transparent;font-size:12px;padding:7px 12px;white-space:nowrap}
+.workspace-view-tabs .workspace-mobile-manage{display:inline-flex;color:var(--muted)}
+:root .workspace-view-tabs button[aria-pressed=true]{border-color:var(--accent);background:var(--selected,var(--panel));color:var(--accent)}
+.workspace-tab-count{font-size:10px;font-variant-numeric:tabular-nums;opacity:.8}
+.workspace-view-tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-width:0}
+.workspace-view-tools .local-scene-layout{display:flex;gap:7px;font-size:11px;min-width:0}
+.workspace-view-tools .local-scene-layout select{min-height:38px;font-size:12px;padding:6px 9px;max-width:100%}
+.workspace-view-tools input[type=search]{flex:1;min-height:38px;min-width:120px!important;font-size:13px;padding:8px 12px}
+@media(max-width:800px){
+ .project-workspace .project-workspace-header{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:8px;margin-bottom:8px}
+ .workspace-back{grid-column:1;grid-row:1;min-width:0;min-height:42px;padding:8px;justify-content:center}
+ .workspace-back span{display:none}
+ .project-workspace-header .workspace-project-select{grid-column:2 / -1;grid-row:1;min-width:0;margin:0}
+ .project-workspace-header .workspace-project-select select{max-width:none;min-height:42px;font-size:14px;padding:8px 12px}
+ .project-workspace-header .workspace-queue-link{grid-column:1 / 3;grid-row:2;justify-self:start;padding:4px 0;min-height:36px;font-size:12px}
+ .project-workspace-header .local-mobile-compose{grid-column:3;grid-row:2;margin:0;min-height:40px;padding:8px 16px;font-size:13px;border-radius:10px}
+ .project-workspace-header .workspace-cancel-all{grid-column:1 / -1;justify-self:start;padding:6px 10px;min-height:34px}
+ .project-workspace-header .workspace-manage{display:none}
+ .workspace-filters{gap:8px;padding:4px 0 10px}
+ .workspace-view-tabs{display:flex;width:100%;gap:2px;padding:3px;border-radius:10px}
+ .workspace-view-tabs button{flex:1;min-width:0;font-size:12px;min-height:36px;padding:6px 5px;border-radius:7px}
+ .workspace-view-tools{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+ .workspace-view-tools .local-scene-layout{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px;font-size:11px}
+ .workspace-view-tools .local-scene-layout select{width:100%;min-height:38px;font-size:12px;padding:6px}
+ .workspace-filters .workspace-view-tools input[type=search]{grid-column:1 / -1;width:100%;min-width:0!important;font-size:16px;min-height:40px;margin:0}
+}
