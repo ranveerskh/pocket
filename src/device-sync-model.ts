@@ -25,8 +25,8 @@ export function canonicalLocalData(data:SyncData,connection:string):SyncData {
  return {folders:data.folders,jobs:data.jobs.map(job=>localBase(job.base,base)?{...job,base}:job),characters:data.characters.map(character=>localBase(character.base,base)?{...character,base}:character)};
 }
 function cleanJob(job: Job,scope:SyncScope='runpod',connection=''): Job | undefined {
-  if (!validId(job.id) || (job.hidden && scope!=='local') || (scope==='local'?!['queued','running','unknown','complete','error','cancelled'].includes(job.state):job.state!=='complete') || (scope==='local'?job.base!==connection:!validBase(job.base)) ||
-    typeof job.prompt !== 'string' || job.prompt.length > 30_000 || (scope==='local'?job.files!==undefined&&!Array.isArray(job.files):!Array.isArray(job.files)) ||
+  if (!validId(job.id) || (job.hidden && scope!=='local') || !['queued','running','unknown','complete','error','cancelled'].includes(job.state) || (scope==='local'?job.base!==connection:!validBase(job.base)) ||
+    typeof job.prompt !== 'string' || job.prompt.length > 30_000 || (job.files!==undefined&&!Array.isArray(job.files)) ||
     job.id.startsWith('pending-') || !Number.isFinite(job.created) || !Number.isFinite(job.seed) || !Number.isFinite(job.duration)) return;
   const files = (job.files||[]).filter(file => file && file.type === 'output' && safePath(file.filename) &&
     !file.filename.includes('/') && safePath(file.subfolder||'')).map(file => ({
@@ -49,7 +49,16 @@ function cleanJob(job: Job,scope:SyncScope='runpod',connection=''): Job | undefi
     guidance: Number.isFinite(guidance) ? guidance : undefined,
     referenceCharacterIds: Array.isArray(referenceCharacterIds) ? referenceCharacterIds.filter(validId).slice(0, 3) : undefined,
     turbo: turbo === true, templates: Array.isArray(templates) ? templates.filter(validId).slice(0, 50) : undefined,
-    state: scope==='local'?job.state:'complete', files,
+    state: job.state, files,
+    startedAt:Number.isFinite(job.startedAt)?job.startedAt:undefined,
+    queuePosition:Number.isFinite(job.queuePosition)?job.queuePosition:undefined,
+    error:typeof job.error==='string'?job.error.slice(0,1000):undefined,
+    timingSource:job.timingSource==='server'||job.timingSource==='observed'?job.timingSource:undefined,
+    elapsedSeconds:Number.isFinite(job.elapsedSeconds)?job.elapsedSeconds:undefined,
+    queueSeconds:Number.isFinite(job.queueSeconds)?job.queueSeconds:undefined,
+    totalSeconds:Number.isFinite(job.totalSeconds)?job.totalSeconds:undefined,
+    durationMapped:job.durationMapped,referenceUsed:job.referenceUsed,referenceProfile:job.referenceProfile,
+    device:typeof job.device==='string'?job.device.slice(0,200):undefined,
     ...(scope==='local'?{hidden:job.hidden===true,visibilityChangedAt:Number.isFinite(job.visibilityChangedAt)?job.visibilityChangedAt:0,startedAt:Number.isFinite(job.startedAt)?job.startedAt:undefined,queuePosition:Number.isFinite(job.queuePosition)?job.queuePosition:undefined,error:typeof job.error==='string'?job.error.slice(0,1000):undefined}:{}),
   };
 }
@@ -115,7 +124,9 @@ export async function mergeSync(local: SyncData, remote: SyncSnapshot, seen: See
       const remoteVisibility=(existing.item as Job).visibilityChangedAt||0,localVisibility=(record.item as Job).visibilityChangedAt||0;
       if(remoteVisibility>localVisibility){record.item={...record.item,hidden:(existing.item as Job).hidden,visibilityChangedAt:remoteVisibility};}
       else if(localVisibility>remoteVisibility){existing.item={...existing.item,hidden:(record.item as Job).hidden,visibilityChangedAt:localVisibility};}
-      const rank=(state:string)=>['complete','error','cancelled'].includes(state)?3:state==='running'?2:state==='queued'?1:0;
+    }
+    if(record.kind==='jobs'&&existing?.kind==='jobs'){
+      const rank=(state:string)=>state==='complete'?4:['error','cancelled'].includes(state)?3:state==='running'?2:state==='queued'?1:0;
       const remoteRank=rank((existing.item as Job).state),localRank=rank((record.item as Job).state);
       if(remoteRank>localRank)continue;
       if(localRank>remoteRank){shared.set(key,record);continue;}

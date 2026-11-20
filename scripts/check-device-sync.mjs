@@ -38,3 +38,24 @@ const hide = await mergeSync({...original,jobs:[{...clip,hidden:true}]},decoded,
 assert.deepEqual(hide.snapshot.hidden,['shot-1']);
 assert.equal(hide.snapshot.records.some(record=>record.kind==='jobs'),false);
 console.log('Device sync verified: encryption, two-device merge, RunPod output links, local removal and Hidden exclusion.');
+
+// A submitted job reaches the second device before any output files exist.
+const running={...clip,id:'active-1',state:'running',files:undefined,startedAt:1000,timingSource:'server',queueSeconds:2,referenceUsed:true,referenceProfile:'i2-a0',durationMapped:true};
+const queued={...running,id:'active-2',state:'queued',startedAt:undefined,queuePosition:1};
+const staged={...queued,id:'pending-batch-0',state:'staging'};
+const a=await mergeSync({folders:[folder],jobs:[running,queued,staged],characters:[]},initial,{});
+assert.equal(a.snapshot.records.filter(r=>r.kind==='jobs').length,2);
+const b=await mergeSync(empty,await openSnapshot(await sealSnapshot(a.snapshot,key),key),{});
+assert.equal(b.incoming.jobs.find(j=>j.id===running.id).state,'running');
+assert.equal(b.incoming.jobs.find(j=>j.id===queued.id).queuePosition,1);
+assert.equal(b.incoming.jobs.find(j=>j.id===running.id).startedAt,1000);
+const finished={...running,state:'complete',files:clip.files,elapsedSeconds:75,completedAt:76000};
+const done=await mergeSync({folders:[folder],jobs:[finished,queued],characters:[]},a.snapshot,a.seen);
+const stalePhone=await mergeSync(b.incoming,done.snapshot,b.seen);
+assert.equal(stalePhone.snapshot.records.find(r=>r.kind==='jobs'&&r.item.id===running.id).item.state,'complete');
+assert.equal(stalePhone.incoming.jobs.find(j=>j.id===running.id).elapsedSeconds,75);
+assert.equal(stalePhone.incoming.jobs.find(j=>j.id===running.id).autoCopyPending,undefined);
+assert.equal(stalePhone.incoming.jobs.find(j=>j.id===running.id).referenceProfile,'i2-a0');
+const staleQueued=await mergeSync({folders:[],characters:[],jobs:[{...running,state:'queued'}]},a.snapshot,{});
+assert.equal(staleQueued.snapshot.records.find(r=>r.kind==='jobs'&&r.item.id===running.id).item.state,'running');
+console.log('RunPod live queue sync verified: submitted IDs only, running/queued status, timing, completion and stale peer protection.');

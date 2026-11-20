@@ -141,7 +141,7 @@ export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOpt
       if (!document.hidden && current.current) void sync(current.current, 'refresh');
     };
     const first = setTimeout(refresh, 1000);
-    const timer = setInterval(refresh,isLocal?10_000:30_000);
+    const timer = setInterval(refresh,10_000);
     document.addEventListener('visibilitychange', refresh);
     return () => {
       clearTimeout(first);
@@ -151,7 +151,7 @@ export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOpt
   }, [pairing?.code, sync, vault.loaded, vault.legacyLocked]);
 
   useEffect(()=>{
-    if(!isLocal||!pairing?.code||!vault.loaded)return;
+    if(!pairing?.code||!vault.loaded)return;
     const timer=setTimeout(()=>{if(!document.hidden&&current.current)void sync(current.current,'refresh');},1500);
     return()=>clearTimeout(timer);
   },[pairing?.code,vault.jobs,vault.folders,vault.characters,vault.loaded,vault.locked,vault.protectedGallery,sync]);
@@ -226,7 +226,7 @@ export default function DeviceSync({service}: {service: ReturnType<typeof useDev
   </section>;
   return <section className="panel settings-connection device-sync-settings" aria-label="Device Sync">
     <h2><Link2 size={19}/> Device Sync</h2>
-    <p>Pair your phone and laptop to share projects, prompts, references and completed creation links. Videos open from RunPod while their files are available.</p>
+    <p>Pair your phone and laptop to share projects, prompts, references, running and queued shots, and completed creation links. Videos open from RunPod while their files are available.</p>
     {pairing ? <>
       <p role="status">{busy ? 'Syncing…' : 'Paired on this browser'}{last && !busy ? ' · ' + new Date(last).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}</p>
       <div className="device-sync-actions">
