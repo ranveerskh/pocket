@@ -1,3 +1,4 @@
+import {sharePreference,readPreferences} from './sync-preferences';
 import {AISettings,ImprovePrompt,usePromptAssistant} from './PromptAssistant';
 import {mediaURL as resolveMediaURL, isLocal} from './local-mode';
 import {localStorage} from './local-mode';
@@ -77,7 +78,7 @@ export default function Studio(){
  const [mode,setMode]=useState(isLocal?'image':'video');const isQwen=mode==='qwen',isImage=mode==='image'||isQwen,isR2V=mode==='r2v';const qwenTurboEnabled=isLocal&&isQwen&&qwenTurbo;const modelName=isQwen?(qwenTurboEnabled?'Qwen Image 2.1 Turbo':'Qwen Image 2.1'):isImage?'Z-Image Turbo':isR2V?'MiniMax H3 R2V':'MiniMax H3 T2V';const workflowId=isR2V?'builtin-r2v':isQwen?(qwenTurboEnabled?'builtin-qwen-image21-turbo':'builtin-qwen-image21'):undefined;const supportsReference=mode==='video';
  const [tab,setTab]=useState('library');const [base,setBase]=useState(isLocal?'http://127.0.0.1:8000':'');const [draftBase,setDraftBase]=useState(isLocal?'http://127.0.0.1:8000':'');const [connected,setConnected]=useState(false);const [checking,setChecking]=useState(false);const [device,setDevice]=useState('');const [turboReady,setTurboReady]=useState(false);
  const [negativePrompt,setNegativePrompt]=useState(''),[guidance,setGuidance]=useState(1);const [prompt,setPrompt]=useState('');const [duration,setDuration]=useState(5);const [aspect,setAspect]=useState('landscape');const [quality,setQuality]=useState('draft');const [turbo,setTurbo]=useState(false);const [seed,setSeed]=useState('');const [file,setFile]=useState<File|null>(null);const [preview,setPreview]=useState('');
- const deviceSync=useDeviceSync(vault,isLocal?{base,onVisibility:localMedia.setHidden,onConnection:address=>{setBase(address);setDraftBase(address);void connectModel(address,mode);}}:undefined);
+ const deviceSync=useDeviceSync(vault,{base,onVisibility:localMedia.setHidden,onConnection:address=>{setBase(address);setDraftBase(address);void connectModel(address,mode);}});
  const [current,setCurrent]=useState<string|null>(null);const [busy,setBusy]=useState(false);const [message,setMessage]=useState('');const [jobMessage,setJobMessage]=useState('');const [ready,setReady]=useState(false);const [advanced,setAdvanced]=useState(false);const [elapsed,setElapsed]=useState(0);const fileInput=useRef<HTMLInputElement>(null);
  const job=jobs.find(j=>j.id===current&&!j.hidden); const active=job&&['queued','running','unknown'].includes(job.state);const dims=size(quality,aspect);
  useEffect(()=>{try{const p=JSON.parse(localStorage.getItem('pocket-settings')||'{}');if(['video','r2v','image','qwen'].includes(p.mode))setMode(p.mode);if(isLocal&&typeof p.qwenTurbo==='boolean')setQwenTurbo(p.qwenTurbo);if(typeof p.negativePrompt==='string')setNegativePrompt(p.negativePrompt);if(typeof p.guidance==='number'&&p.guidance>=1&&p.guidance<=10)setGuidance(p.guidance);if(p.base){setBase(p.base);setDraftBase(p.base);}if(typeof p.saveFolder==='string')setSaveFolder(p.saveFolder);if(p.workspace===true)setTab('create');if(p.prompt)setPrompt(p.prompt);if(p.duration)setDuration(p.duration);if(p.aspect)setAspect(p.aspect);if(p.quality)setQuality(p.quality);const tp=JSON.parse(localStorage.getItem('pocket-templates')||'[]');if(Array.isArray(tp))setEnabledTemplates(tp);}catch{}setReady(true);},[]);
@@ -128,9 +129,11 @@ export default function Studio(){
  useEffect(()=>{function leave(){if(document.hidden){setPrivateOpen(false);setPrivatePrompt(false);setTab(t=>t==='private'?'library':t);}}document.addEventListener('visibilitychange',leave);return()=>document.removeEventListener('visibilitychange',leave);},[]);
 
  useEffect(()=>{if(!active||!job)return;const update=()=>setElapsed(Math.floor((Date.now()-(job.state==='running'&&job.startedAt?job.startedAt:job.created))/1000));update();const t=setInterval(update,1000);return()=>clearInterval(t);},[active,job?.id,job?.state,job?.created,job?.startedAt]);
- async function connectModel(url:string,selectedMode:string,selectedTurbo=qwenTurbo){setChecking(true);setMessage('');setConnected(false);try{const origin=new URL(url.trim()).origin;const d=await api(origin,'connect',{mode:selectedMode,qwenTurbo:isLocal&&selectedMode==='qwen'&&selectedTurbo});setBase(origin);setDraftBase(origin);setConnected(true);setDevice(d.device);setTurboReady(d.turboReady);if(!d.turboReady)setTurbo(false);}catch(e){setMessage((e as Error).message);}finally{setChecking(false);}}
+ const connectionAttempt=useRef(0);
+ async function connectModel(url:string,selectedMode:string,selectedTurbo=qwenTurbo){const attempt=++connectionAttempt.current;setChecking(true);setMessage('');setConnected(false);try{const origin=new URL(url.trim()).origin;const d=await api(origin,'connect',{mode:selectedMode,qwenTurbo:isLocal&&selectedMode==='qwen'&&selectedTurbo});if(attempt!==connectionAttempt.current)return;setBase(origin);setDraftBase(origin);setConnected(true);if(!isLocal)sharePreference('connection',origin);setDevice(d.device);setTurboReady(d.turboReady);if(!d.turboReady)setTurbo(false);}catch(e){if(attempt===connectionAttempt.current)setMessage((e as Error).message);}finally{if(attempt===connectionAttempt.current)setChecking(false);}}
  const localReconnectStarted=useRef(false);
- useEffect(()=>{if(!isLocal||!ready||localReconnectStarted.current)return;localReconnectStarted.current=true;try{const saved=JSON.parse(localStorage.getItem('pocket-settings')||'{}');if(saved.base)void connectModel(saved.base,saved.mode||'image',saved.qwenTurbo===true);}catch{}},[ready]);
+ useEffect(()=>{if(!ready||localReconnectStarted.current)return;localReconnectStarted.current=true;try{const saved=JSON.parse(localStorage.getItem('pocket-settings')||'{}');const address=(!isLocal&&readPreferences().connection?.value)||saved.base;if(address)void connectModel(address,saved.mode||(isLocal?'image':'video'),saved.qwenTurbo===true);}catch{}},[ready]);
+ useEffect(()=>{if(isLocal||!ready||connected||checking)return;const retry=()=>{const address=readPreferences().connection?.value;if(address&&!document.hidden)void connectModel(address,mode);};const timer=setInterval(retry,30000);window.addEventListener('online',retry);return()=>{clearInterval(timer);window.removeEventListener('online',retry);};},[ready,connected,checking,mode]);
  async function connect(){await connectModel(draftBase,mode);}
  function switchMode(next:string,selectedQwenTurbo=qwenTurbo){if(next===mode)return;setMode(next);setAspect((next==='image'||next==='qwen')?'square':'landscape');setQuality((next==='image'||next==='qwen')?'high':'draft');setConnected(false);setFile(null);setCurrent(null);setMessage('');if(base)void connectModel(base,next,selectedQwenTurbo);}
  async function useAsReference(j:Job){if(!j.files?.length)return;setBusy(true);setMessage('');try{const blob=await localMedia.ensure(j,j.files[0]);if(blob.size>15*1024*1024)throw new Error('Reference image must be under 15 MB.');setMode('video');setCurrent(null);setPrompt('');setFile(new File([blob],j.files[0].filename,{type:blob.type}));setTab('create');if(base)await connectModel(base,'video');}catch(e){setMessage((e as Error).message);setTab('create');}finally{setBusy(false);}}
@@ -264,7 +267,7 @@ export default function Studio(){
   </header>
   <div className="standalone-create-columns">
    <div>{composer}</div>
-   <section className="panel standalone-result" aria-label="Latest result">
+   <aside className="standalone-create-aside"><Timing jobs={jobs} current={recentJob} elapsed={elapsed} candidate={{id:'timing-current',guidance:isQwen?(qwenTurboEnabled?1:guidance):undefined,mode:isImage?'image':'video',workflowId,base,prompt,created:Date.now(),state:'draft',duration,seed:0,quality,aspect,device:device||base,turbo:!isImage&&turbo,referenceUsed:isR2V?activeCharacterIds.length>0:!!file,referenceProfile:refProfile,durationMapped:true}}/><section className="panel standalone-result" aria-label="Latest result">
     <h2>Latest result</h2>
     {recentJob?.files?.length?<>
      <LocalMedia job={recentJob} preview alt={creationLabel(recentJob)}/>
@@ -273,12 +276,12 @@ export default function Studio(){
     {recentJob?.error&&<p className="error">{recentJob.error}</p>}
     {recentJob&&['queued','running'].includes(recentJob.state)&&<button className="button secondary" disabled={cancelling.includes(recentJob.id)} onClick={()=>void cancel(recentJob)}>Stop generation</button>}
     <button className="text-button" disabled={lockedForSubmit} onClick={()=>openProject(saveFolder)}>Open project workspace<ArrowUpRight size={15}/></button>
-   </section>
+   </section></aside>
   </div>
  </section>}
  {tab==='settings'&&<section className="settings-page">
   <h1>Settings</h1>
-  <section className="panel settings-connection" aria-label="RunPod connection">
+  <div className="settings-primary"><section className="panel settings-connection" aria-label="RunPod connection">
    <h2><Link2 size={20}/> {isLocal?'Local ComfyUI connection':'RunPod connection'}</h2>
    {isLocal&&<p>On this PC use http://127.0.0.1:8188. On your phone use your private Tailscale Serve HTTPS address. Your connection is saved on this device.</p>}<label className="field-label" htmlFor="base">ComfyUI URL</label>
    <input id="base" type="url" value={draftBase} autoCapitalize="none" autoCorrect="off" spellCheck={false}
@@ -289,8 +292,9 @@ export default function Studio(){
    </button>
    {connected&&<p className="settings-connected" role="status"><Check size={16}/> Connected · {device}</p>}
   </section>
-  <AISettings service={aiAssistant}/>
-  <ThemeSettings service={theme}/>
+  <DeviceSync service={deviceSync}/>
+  <AISettings service={aiAssistant}/></div>
+  <div className="settings-secondary"><ThemeSettings service={theme}/>
   <section className="panel settings-connection project-grid-settings" aria-label="Projects grid">
    <h2>Projects grid</h2>
    <div className="two-cols">
@@ -311,7 +315,7 @@ export default function Studio(){
   <FolderExportSettings service={folderExport}/>
   <CleanupGuide/>
   <EraseDeviceSettings disabled={busy||refBusy||galleryBusy||bulkState.adding||!!localMedia.copying}/>
-  <DeviceSync service={deviceSync}/>
+  </div>
  </section>}
  {(tab==='library'||tab==='private'&&privateOpen)&&<Gallery projectColumns={projectColumns} onBusy={setGalleryBusy} currentBase={base} key={tab+'-'+mediaProject} initialFolder={mediaProject||undefined} privateView={tab==='private'&&privateOpen} onClosePrivate={()=>{setPrivateOpen(false);setTab('library');void vault.lock().catch(e=>setMessage(e.message));}} vault={vault} busy={busy||!!active} onReuse={reuse} onReference={useAsReference} onCreate={openCreate} onOpenProject={mediaProject?undefined:openProject}/>}
 

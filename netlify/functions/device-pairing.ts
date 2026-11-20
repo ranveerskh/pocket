@@ -24,12 +24,12 @@ export default async function pairing(request:Request,context:{ip?:string}={}){
   }
   if(p.action==='create'){
    if(!auth||typeof p.secret!=='string'||!/^PS1-[a-zA-Z0-9_-]{43}$/.test(p.secret)||auth!==await hash('pocket-sync-room-v1:'+p.secret))return reply(401,'A paired device is required.');
-   if(typeof p.base!=='string'||!/^https:\/\/[a-z0-9-]+\.[a-z0-9-]+\.ts\.net$/.test(p.base))return reply(400,'Use your PC Tailscale HTTPS address.');
+   if(p.scope!=='runpod'&&(typeof p.base!=='string'||!/^https:\/\/[a-z0-9-]+\.[a-z0-9-]+\.ts\.net$/.test(p.base)))return reply(400,'Use your PC Tailscale HTTPS address.');
    if(!await rate('create',10,15*60_000))return reply(429,'Too many pairing codes. Try again in 15 minutes.');
    for(let i=0;i<30;i++){
     const pin=String(1000+crypto.getRandomValues(new Uint32Array(1))[0]%9000),key='pin/'+pin;
     const old=await store.getWithMetadata(key,{type:'json'});if(old&&Number((old.data as any)?.expiresAt)>Date.now())continue;
-    const data:Invite={secret:p.secret,base:p.base,expiresAt:Date.now()+TTL,owner:auth};
+    const data:Invite={secret:p.secret,base:p.scope==='runpod'?'':p.base,expiresAt:Date.now()+TTL,owner:auth};
     const result=await store.setJSON(key,data,old?.etag?{onlyIfMatch:old.etag}:{onlyIfNew:true});
     if(result.modified)return Response.json({pin,expiresAt:data.expiresAt},{headers});
    }return reply(503,'Pairing is busy. Try again shortly.');

@@ -550,3 +550,15 @@
 .workspace-timing-dialog>header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 18px;border-bottom:1px solid var(--line)}
 .workspace-timing-dialog .timing-panel{margin:0;border:0;box-shadow:none}
 @media(max-width:800px){.local-scene-grid[data-columns="3"] .shot-timing-title{font-size:10px}.timing-dialog-backdrop{padding:16px 12px max(24px,env(safe-area-inset-bottom))}.workspace-timing-dialog{max-height:88dvh}}
+
+/* Settings uses available desktop width; phone remains a single column. */
+.settings-page{max-width:1500px;width:100%;margin:20px auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start}
+.settings-page>h1,.settings-page>.settings-section-title{grid-column:1/-1}
+.settings-page>.panel,.settings-page>section{min-width:0;margin:0}
+.standalone-create-aside{display:grid;gap:16px;min-width:0}
+.standalone-create-aside>.timing-panel{margin:0}
+@media(min-width:1000px){.standalone-create-columns>div>.workspace-settings:has(>.timing-panel){display:none}}
+@media(max-width:760px){.settings-page{display:block}.settings-page>.panel,.settings-page>section{margin:14px 0}.standalone-create-aside{gap:12px}}
+
+.settings-primary,.settings-secondary{display:grid;gap:18px;align-content:start;min-width:0}.settings-primary>.panel,.settings-secondary>.panel,.settings-secondary>.theme-settings{margin:0;min-width:0}.settings-secondary>.settings-section-title{margin:8px 0 0}
+@media(max-width:760px){.settings-primary,.settings-secondary{gap:14px}.settings-secondary{margin-top:14px}}

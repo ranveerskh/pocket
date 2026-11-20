@@ -1,3 +1,4 @@
+import {cleanPreferences,type SharedPreferences} from './sync-preferences.ts';
 import type {Character} from './reference-model';
 import type {Folder, Job} from './vault';
 
@@ -5,7 +6,7 @@ export type SyncData = {folders: Folder[]; jobs: Job[]; characters: Character[]}
 type RecordData = Folder | Job | Character;
 type SyncRecord = {kind: 'folders' | 'jobs' | 'characters'; item: RecordData};
 export type SyncScope='runpod'|'local';
-export type SyncSnapshot = {version: 1; records: SyncRecord[]; hidden: string[];scope?:SyncScope;connection?:string;removed?:string[]};
+export type SyncSnapshot = {version: 1; records: SyncRecord[]; hidden: string[];scope?:SyncScope;connection?:string;removed?:string[];preferences?:SharedPreferences};
 export type SeenRecords = Record<string, string>;
 
 const keyOf = ({kind, item}: SyncRecord) => kind + ':' + item.id;
@@ -96,7 +97,7 @@ export function parseSnapshot(raw: string,scope:SyncScope='runpod'): SyncSnapsho
     if (record.kind === 'jobs') data.jobs.push(record.item as Job);
     if (record.kind === 'characters') data.characters.push(record.item as Character);
   }
-  return {version: 1, records: cleanRecords(data,scope,connection), hidden: parsed.hidden.filter(validId),...(scope==='local'?{removed:Array.isArray(parsed.removed)?parsed.removed.filter(value=>typeof value==='string'&&/^(folders|characters):[a-zA-Z0-9_-]{1,180}$/.test(value)).slice(0,12000):[]}:{}),...(scope==='local'?{scope,connection}:{})};
+  return {version: 1, records: cleanRecords(data,scope,connection), hidden: parsed.hidden.filter(validId),...(scope==='local'?{removed:Array.isArray(parsed.removed)?parsed.removed.filter(value=>typeof value==='string'&&/^(folders|characters):[a-zA-Z0-9_-]{1,180}$/.test(value)).slice(0,12000):[]}:{}),...(scope==='local'?{scope,connection}:{}),...(scope==='runpod'&&Object.keys(cleanPreferences(parsed.preferences)).length?{preferences:cleanPreferences(parsed.preferences)}:{})};
 }
 
 async function fingerprint(record: SyncRecord) {
@@ -149,7 +150,7 @@ export async function mergeSync(local: SyncData, remote: SyncSnapshot, seen: See
     nextSeen[key] = hash;
     if(scope==='local'&&record.kind==='jobs')nextSeen['visibility:'+record.item.id]=(record.item as Job).hidden?'hidden':'visible';
   }
-  const snapshot: SyncSnapshot = {version: 1, records: [...shared.values()], hidden: [...hidden],...(scope==='local'?{scope,connection,removed:[...removed]}:{})};
+  const snapshot: SyncSnapshot = {version: 1, records: [...shared.values()], hidden: [...hidden],...(scope==='local'?{scope,connection,removed:[...removed]}:{}),...(scope==='runpod'&&remote.preferences?{preferences:cleanPreferences(remote.preferences)}:{})};
   return {snapshot, incoming, removed:[...removed], hidden:[...hidden], seen: nextSeen, changed: JSON.stringify(remote) !== JSON.stringify(snapshot)};
 }
 

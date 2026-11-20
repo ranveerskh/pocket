@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {cleanPreferences,mergePreferences} from '../src/sync-preferences.ts';
+import {mergeSync,pairKeys,newPairCode,sealSnapshot,openSnapshot} from '../src/device-sync-model.ts';
+const now=Date.now(),base='https://sample-8188.proxy.runpod.net',token='a'.repeat(64);
+const first=cleanPreferences({connection:{value:base,at:now-10},ai:{value:token,at:now-10}});
+assert.equal(first.ai.value,token);
+assert.deepEqual(cleanPreferences({ai:{value:'sk-plain-secret',at:now},connection:{value:'https://evil.test',at:now}}),{});
+assert.deepEqual(cleanPreferences({ai:{value:token,at:now+9999999}}),{});
+const newer=mergePreferences(first,{connection:{value:'https://new-8188.proxy.runpod.net',at:now}});
+assert.equal(mergePreferences(newer,first).connection.value,newer.connection.value,'An offline device cannot restore the old pod URL');
+const snapshot={version:1,records:[],hidden:[],preferences:newer};
+const {key}=await pairKeys(newPairCode());const encrypted=await sealSnapshot(snapshot,key);
+assert.ok(!encrypted.includes(token));assert.ok(!encrypted.includes(base));
+const opened=await openSnapshot(encrypted,key);assert.deepEqual(opened.preferences,newer);
+const merged=await mergeSync({jobs:[],characters:[],folders:[]},opened,{});
+assert.equal(merged.changed,false,'Unchanged preferences must not cause endless sync writes');
+assert.deepEqual(merged.snapshot.preferences,newer);
+console.log('Shared preferences verified: encrypted token and connection, URL/token validation, latest change wins, and stable sync round trip.');

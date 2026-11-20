@@ -1,1 +1,3 @@
 .ai-settings p,.ai-improve p{font-size:12px;line-height:1.7;margin:12px 0}.ai-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.ai-improve{margin:16px 0}.ai-result{margin-top:12px;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}.ai-result textarea{width:100%;min-height:200px;max-height:400px}.ai-settings input{width:100%}
+
+.ai-usage{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}.ai-usage>strong{font-size:26px;color:var(--accent)}.ai-usage dl{font-size:13px}.ai-usage dl>div{display:flex;justify-content:space-between;gap:12px;padding:5px 0}.ai-usage dd{margin:0}.ai-usage a{color:var(--accent)}

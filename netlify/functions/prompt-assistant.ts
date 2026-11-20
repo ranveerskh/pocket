@@ -12,9 +12,12 @@ export default async function assistant(req:Request){
  const id=Array.from(new Uint8Array(hash),x=>x.toString(16).padStart(2,'0')).join('');
  const encryption=await crypto.subtle.importKey('raw',await crypto.subtle.digest('SHA-256',new TextEncoder().encode('encrypt:'+token)),'AES-GCM',false,['encrypt','decrypt']);
  const store=getStore({name:'pocket-ai-credentials-v1',consistency:'strong'});
- if(req.method==='DELETE'){await store.delete(id);return json({ok:true});}
+ const ledger=getStore({name:'pocket-ai-usage-v1',consistency:'strong'});
+ const month=new Date().toISOString().slice(0,7);
+ const summary=async()=>{const data=await ledger.get(id,{type:'json'}) as any;return {month,...(data?.months?.[month]||{count:0,input:0,output:0,cached:0,cost:0})};};
+ if(req.method==='DELETE'){await store.delete(id);return json({ok:true,summary:await summary()});}
  const encrypted=await store.get(id,{type:'json'}) as {iv:number[];data:number[]}|null;
- if(req.method==='GET')return json({configured:!!encrypted,model:MODEL});
+ if(req.method==='GET')return json({configured:!!encrypted,model:MODEL,summary:await summary()});
  if(!['PUT','POST'].includes(req.method))return json({error:'Method unavailable.'},405);
  const raw=await req.text();if(raw.length>30000)return json({error:'Prompt is too long.'},413);
  const body=JSON.parse(raw);
@@ -32,7 +35,7 @@ export default async function assistant(req:Request){
  const iv=crypto.getRandomValues(new Uint8Array(12));
  const data=await crypto.subtle.encrypt({name:'AES-GCM',iv},encryption,new TextEncoder().encode(key));
  await store.setJSON(id,{iv:Array.from(iv),data:Array.from(new Uint8Array(data))});
- return json({ok:true,model:MODEL});
+ return json({ok:true,model:MODEL,summary:await summary()});
  }
  const prompt=typeof body.prompt==='string'?body.prompt.trim():'';
  if(!prompt||prompt.length>20000)return json({error:'Enter a prompt of up to 20,000 characters.'},400);
@@ -44,6 +47,19 @@ export default async function assistant(req:Request){
  const usage=result.usage||{};
  const input=Number(usage.input_tokens)||0,output=Number(usage.output_tokens)||0,cached=Math.min(input,Number(usage.input_tokens_details?.cached_tokens)||0);
  const cost=((input-cached)*0.10+cached*0.01+output*0.50)/1000000;
- return json({text:text||'',error:text?undefined:'No improved prompt was returned. Your original prompt is unchanged.',usage:{input,output,cached,cost},id:result.id,model:MODEL});
+ let usageSaved=false;
+ try {
+ // Compare-and-swap prevents concurrent devices from overwriting each other's totals.
+ for(let attempt=0;attempt<8;attempt++){
+  const old=await ledger.getWithMetadata(id,{type:'json'});const data=(old?.data||{}) as any;
+  if(data.ids?.includes(result.id)){usageSaved=true;break;}
+  const previous=data.months?.[month]||{count:0,input:0,output:0,cached:0,cost:0};
+  const months=Object.fromEntries(Object.entries(data.months||{}).filter(([m])=>m>=new Date(Date.now()-400*86400000).toISOString().slice(0,7)));
+  months[month]={count:previous.count+1,input:previous.input+input,output:previous.output+output,cached:previous.cached+cached,cost:previous.cost+cost};
+  const written=await ledger.setJSON(id,{months,ids:[...(data.ids||[]),result.id].slice(-5000)},old?.etag?{onlyIfMatch:old.etag}:{onlyIfNew:true});
+  if(written.modified){usageSaved=true;break;}
+ }
+ }catch{usageSaved=false;}
+ return json({text:text||'',error:text?undefined:'No improved prompt was returned. Your original prompt is unchanged.',usage:{input,output,cached,cost},summary:usageSaved?await summary():undefined,usageSaved,id:result.id,model:MODEL});
  }catch{return json({error:'AI service could not complete the request. Your original prompt is unchanged.'},502);}
 }

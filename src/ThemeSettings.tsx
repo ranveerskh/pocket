@@ -1,6 +1,6 @@
 import {localStorage,isLocal} from './local-mode';
 import {useEffect, useLayoutEffect, useState} from 'react';
-import {Monitor, Moon, Sun} from 'lucide-react';
+
 
 export const localThemes = [
  {value:'ocean',label:'Ocean',light:false,swatch:'#55d6c2',background:'#0c191d'},
@@ -10,21 +10,26 @@ export const localThemes = [
  {value:'sand',label:'Sand',light:true,swatch:'#9a4c22',background:'#faf4e9'},
  {value:'mint',label:'Mint',light:true,swatch:'#12735e',background:'#edf8f1'},
 ] as const;
-type Theme = 'dark' | 'light' | 'system' | typeof localThemes[number]['value'];
+export const runpodThemes=[
+ {value:'amethyst',label:'Amethyst',light:false,swatch:'#c7b4ff',background:'#111214'},
+ ...localThemes,
+ {value:'rose',label:'Rose',light:true,swatch:'#a63c64',background:'#fff1f5'},
+] as const;
+type Theme = 'dark' | 'light' | 'system' | typeof runpodThemes[number]['value'];
 const KEY = 'pocket-theme';
 function savedTheme(): Theme {
  try {
   const value=localStorage.getItem(KEY);
   if(isLocal){if(localThemes.some(t=>t.value===value))return value as Theme;return value==='light'?'cloud':'ocean';}
-  if(value==='light'||value==='system')return value;
+  if(runpodThemes.some(t=>t.value===value))return value as Theme;if(value==='light')return 'cloud';
  }catch{}
- return isLocal?'ocean':'dark';
+ return isLocal?'ocean':'amethyst';
 }
 export function useTheme() {
  const [theme,setTheme]=useState<Theme>(savedTheme),[error,setError]=useState('');
  useLayoutEffect(()=>{
   const system=window.matchMedia('(prefers-color-scheme: light)');
-  function apply(){const preset=isLocal?localThemes.find(t=>t.value===theme)||localThemes[0]:undefined;
+  function apply(){const presets=isLocal?localThemes:runpodThemes;const preset=presets.find(t=>t.value===theme)||presets[0];
    const light=preset?preset.light:theme==='light'||theme==='system'&&system.matches;
    document.documentElement.dataset.theme=light?'light':'dark';
    if(preset)document.documentElement.dataset.localTheme=preset.value;else delete document.documentElement.dataset.localTheme;
@@ -38,6 +43,6 @@ export function useTheme() {
 }
 export default function ThemeSettings({service}:{service:ReturnType<typeof useTheme>}) {
  return <section className="panel settings-connection theme-settings" aria-label="Appearance"><h2>Appearance</h2>
- {isLocal?<div className="local-theme-groups">{[false,true].map(light=><div key={String(light)}><h3>{light?'Light themes':'Dark themes'}</h3><div className="theme-choices" role="group" aria-label={light?'Light themes':'Dark themes'}>{localThemes.filter(t=>t.light===light).map(t=><button key={t.value} className="button local-theme-choice" aria-pressed={service.theme===t.value} onClick={()=>service.choose(t.value)}><span className="theme-swatch" style={{background:t.background,borderColor:t.swatch}}><span style={{background:t.swatch}}/></span>{t.label}</button>)}</div></div>)}</div>:<div className="theme-choices" role="group" aria-label="Color theme">{([{value:'dark',label:'Dark',Icon:Moon},{value:'light',label:'Light',Icon:Sun},{value:'system',label:'System',Icon:Monitor}] as const).map(({value,label,Icon})=><button key={value} className="button" aria-pressed={service.theme===value} onClick={()=>service.choose(value)}><Icon size={18}/>{label}</button>)}</div>}
- <p>{isLocal?'Your theme is remembered on this device.':'System follows your device’s appearance. Your choice is remembered on this browser.'}</p>{service.error&&<p role="status">{service.error}</p>}</section>;
+ {<div className="local-theme-groups">{[false,true].map(light=><div key={String(light)}><h3>{light?'Light themes':'Dark themes'}</h3><div className="theme-choices" role="group" aria-label={light?'Light themes':'Dark themes'}>{(isLocal?localThemes:runpodThemes).filter(t=>t.light===light).map(t=><button key={t.value} className="button local-theme-choice" aria-pressed={service.theme===t.value} onClick={()=>service.choose(t.value)}><span className="theme-swatch" style={{background:t.background,borderColor:t.swatch}}><span style={{background:t.swatch}}/></span>{t.label}</button>)}</div></div>)}</div>}
+ <p>{isLocal?'Your theme is remembered on this device.':'Choose a dark or light shade. Your choice is remembered on this browser.'}</p>{service.error&&<p role="status">{service.error}</p>}</section>;
 }

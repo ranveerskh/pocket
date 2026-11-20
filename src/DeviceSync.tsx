@@ -1,8 +1,9 @@
+import {readPreferences,mergePreferences,applyPreferences} from './sync-preferences';
 import {readDeviceDeletions} from './device-deletions';
 import {deviceResetting} from './reset-state';
 import {localStorage,isLocal} from './local-mode';
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {Copy, Link2, RefreshCw} from 'lucide-react';
+import {Link2, RefreshCw} from 'lucide-react';
 import {applyLocalSync,canonicalLocalData,sharedPCBase,mergeSync, newPairCode, openSnapshot, pairKeys, sealSnapshot, type SeenRecords, type SyncSnapshot} from './device-sync-model';
 import type {useGalleryStore} from './vault';
 
@@ -30,7 +31,7 @@ function mergeItems<T extends {id: string}>(items: T[], incoming: T[]) {
   return [...result.values()];
 }
 
-export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOptions?:{base:string;onConnection:(base:string)=>void;onVisibility:(job:import('./vault').Job,hidden:boolean)=>Promise<void>}) {
+export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOptions?:{base:string;onConnection:(base:string)=>void;onVisibility?:(job:import('./vault').Job,hidden:boolean)=>Promise<void>}) {
   const [invite,setInvite]=useState<Invite>();
   const [pending,setPending]=useState<Pending|null>(null);
   const [joining,setJoining]=useState<{pin:string;ticket:string;expiresAt:number}>();
@@ -81,6 +82,7 @@ export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOpt
         const local=isLocal?{...original,...canonicalLocalData(original,base)}:original;
         const rebased=isLocal&&(local.jobs.some((j,i)=>j.base!==original.jobs[i].base)||local.characters.some((c,i)=>c.base!==original.characters[i].base));
         const merged = await mergeSync(local, snapshot, request.seen,isLocal?'local':'runpod',base);
+        if(!isLocal){const preferences=mergePreferences(readPreferences(),snapshot.preferences||{});if(Object.keys(preferences).length)merged.snapshot.preferences=preferences;merged.changed=JSON.stringify(merged.snapshot)!==JSON.stringify(snapshot);}
         if(deviceResetting)return false;
         if (merged.changed || !etag) {
           const body = await sealSnapshot(merged.snapshot, key);
@@ -109,7 +111,7 @@ export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOpt
           };
           const deviceDeleted=new Set(readDeviceDeletions());data.jobs=data.jobs.filter(job=>!deviceDeleted.has(job.id));
           if(isLocal&&local.protectedGallery&&!local.locked){
-            for(const job of data.jobs){const previous=local.jobs.find(item=>item.id===job.id);if(previous?.hidden!==job.hidden)await options.current?.onVisibility(job,!!job.hidden);}
+            for(const job of data.jobs){const previous=local.jobs.find(item=>item.id===job.id);if(previous?.hidden!==job.hidden)await options.current?.onVisibility?.(job,!!job.hidden);}
           }
           // An edit made during media encryption wins; retry against it on the next pass.
           const fresh=live.current;
@@ -121,6 +123,7 @@ export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOpt
         setPairing(next);
         current.current = next;
         if(isLocal&&options.current?.base!==base)options.current?.onConnection(base);
+        if(!isLocal){const prefs=applyPreferences(merged.snapshot.preferences||{});if(prefs.connection&&options.current?.base!==prefs.connection.value)options.current?.onConnection(prefs.connection.value);}
         setLast(Date.now());
         setStatus(hasLocalUpdates ? 'Local changes will be picked up on the next sync.' : isLocal&&merged.hidden.length&&!local.protectedGallery?'Projects are up to date. Set a Hidden-folder PIN on this device to open synced hidden items.':'Projects are up to date.');
         return true;
@@ -155,17 +158,18 @@ export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOpt
     const timer=setTimeout(()=>{if(!document.hidden&&current.current)void sync(current.current,'refresh');},1500);
     return()=>clearTimeout(timer);
   },[pairing?.code,vault.jobs,vault.folders,vault.characters,vault.loaded,vault.locked,vault.protectedGallery,sync]);
-  async function makeInvite(request:Pairing){setBusy(true);setError('');try{const data=await pairRequest('create',{secret:request.code,base:sharedPCBase(request.base)},request.code);setInvite(data);setPending(null);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
-  async function create(base?:string){if(!isLocal){await sync({code:newPairCode(),seen:{}},'create');return;}try{const request={code:newPairCode(),seen:{},base:sharedPCBase(base)};if(await sync(request,'create'))await makeInvite(request);}catch(e){setError((e as Error).message);}}
-  async function join(code:string){if(!isLocal){await sync({code:code.trim(),seen:{}},'join');return;}setBusy(true);setError('');try{const pin=code.trim();if(!/^\d{4}$/.test(pin))throw new Error('Enter the 4-digit code.');const device=/iPhone|iPad/i.test(navigator.userAgent)?'iPhone / iPad':/Windows/i.test(navigator.userAgent)?'Windows PC':'Another device';const data=await pairRequest('join',{pin,device});setJoining({pin,...data});setStatus('Approve this connection on the first device.');}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+  useEffect(()=>{const changed=()=>{if(current.current)void sync(current.current,'refresh');};window.addEventListener('pocket-preferences-changed',changed);return()=>window.removeEventListener('pocket-preferences-changed',changed);},[sync]);
+  async function makeInvite(request:Pairing){setBusy(true);setError('');try{const data=await pairRequest('create',{secret:request.code,base:isLocal?sharedPCBase(request.base):'',scope:isLocal?'local':'runpod'},request.code);setInvite(data);setPending(null);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+  async function create(base?:string){try{const request={code:newPairCode(),seen:{},base:isLocal?sharedPCBase(base):undefined};if(await sync(request,'create'))await makeInvite(request);}catch(e){setError((e as Error).message);}}
+  async function join(code:string){setBusy(true);setError('');try{const pin=code.trim();if(!/^\d{4}$/.test(pin))throw new Error('Enter the 4-digit code.');const device=/iPhone|iPad/i.test(navigator.userAgent)?'iPhone / iPad':/Windows/i.test(navigator.userAgent)?'Windows PC':'Another device';const data=await pairRequest('join',{pin,device});setJoining({pin,...data});setStatus('Approve this connection on the first device.');}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
   useEffect(()=>{
-    if(!isLocal||!invite||!pairing)return;let gone=false;let timer:ReturnType<typeof setTimeout>;
+    if(!invite||!pairing)return;let gone=false;let timer:ReturnType<typeof setTimeout>;
     async function poll(){if(invite!.expiresAt<=Date.now()){setInvite(undefined);setPending(null);return;}try{const data=await pairRequest('peek',{pin:invite!.pin},pairing!.code);if(!gone)setPending(data.pending);}catch{if(!gone){setInvite(undefined);setPending(null);}return;}if(!gone)timer=setTimeout(poll,3000);}
     void poll();return()=>{gone=true;clearTimeout(timer);};
   },[invite?.pin,pairing?.code]);
   useEffect(()=>{
-    if(!isLocal||!joining)return;let gone=false;let timer:ReturnType<typeof setTimeout>;
-    async function poll(){if(joining!.expiresAt<=Date.now()){setJoining(undefined);setError('Code expired. Create another code.');return;}try{const data=await pairRequest('status',{pin:joining!.pin,ticket:joining!.ticket});if(!gone&&!data.waiting){setJoining(undefined);await sync({code:data.secret,base:sharedPCBase(data.base),seen:{}},'join');return;}}catch(e){if(!gone){setJoining(undefined);setError((e as Error).message);}return;}if(!gone)timer=setTimeout(poll,2000);}
+    if(!joining)return;let gone=false;let timer:ReturnType<typeof setTimeout>;
+    async function poll(){if(joining!.expiresAt<=Date.now()){setJoining(undefined);setError('Code expired. Create another code.');return;}try{const data=await pairRequest('status',{pin:joining!.pin,ticket:joining!.ticket});if(!gone&&!data.waiting){setJoining(undefined);await sync({code:data.secret,base:isLocal?sharedPCBase(data.base):undefined,seen:{}},'join');return;}}catch(e){if(!gone){setJoining(undefined);setError((e as Error).message);}return;}if(!gone)timer=setTimeout(poll,2000);}
     void poll();return()=>{gone=true;clearTimeout(timer);};
   },[joining?.ticket,sync]);
   async function approve(){if(!invite||!pairing||!pending)return;setBusy(true);setError('');try{await pairRequest('approve',{pin:invite.pin,request:pending.request},pairing.code);setPending({...pending,approved:true});setStatus('Connection approved. The other device is finishing pairing.');}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
@@ -199,52 +203,16 @@ export default function DeviceSync({service}: {service: ReturnType<typeof useDev
   const [shareBase,setShareBase]=useState(service.shareBase);
   useEffect(()=>{if(service.shareBase)setShareBase(service.shareBase);},[service.shareBase]);
   const [input, setInput] = useState('');
-  const [reveal, setReveal] = useState(false);
-  const [copyNote, setCopyNote] = useState('');
   const {pairing, busy, status, error, last, disabled} = service;
 
-  async function copy() {
-    if (!pairing) return;
-    try {
-      await navigator.clipboard.writeText(pairing.code);
-      setCopyNote('Pairing code copied.');
-    } catch {
-      setReveal(true);
-      setCopyNote('Select the code below to copy it.');
-    }
-  }
-
-  if(isLocal)return <section className="panel settings-connection device-sync-settings" aria-label="Device Sync">
-    <h2><Link2 size={19}/> Phone &amp; PC Sync</h2>
-    <p>Pair once with a 4-digit code. Projects, prompts, references and generation status sync between devices. Videos stay on your PC and open through Tailscale.</p>
-    {pairing?<><p role="status">{busy?'Syncing…':'Phone & PC sync enabled'}{last&&!busy?' · '+new Date(last).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):''}</p><div className="device-sync-actions"><button className="button primary" disabled={busy||disabled} onClick={()=>void service.newInvite()}>Create 4-digit code</button><button className="button secondary" disabled={busy||disabled} onClick={()=>void service.refresh()}><RefreshCw size={15}/>Sync now</button><button className="text-button" disabled={busy} onClick={()=>service.disconnect()}>Disconnect this device</button></div></>:<><label className="field-label">PC Tailscale HTTPS address<input type="url" value={shareBase} onChange={e=>setShareBase(e.target.value)} placeholder="https://your-pc.tail123.ts.net" autoCapitalize="none" spellCheck={false}/></label><button className="button primary" disabled={busy||disabled||!!service.joining} onClick={()=>void service.create(shareBase)}>Create 4-digit code</button><label className="field-label">Or enter the code from your other device<input aria-label="4-digit pairing code" inputMode="numeric" autoComplete="off" maxLength={4} value={input} onChange={e=>setInput(e.target.value.replace(/\D/g,''))} placeholder="1234"/></label><button className="button secondary" disabled={busy||disabled||input.length!==4||!!service.joining} onClick={()=>void service.join(input)}>Pair device</button></>}
+  return <section className="panel settings-connection device-sync-settings" aria-label="Device Sync">
+    <h2><Link2 size={19}/> {isLocal?'Phone & PC Sync':'Device Sync'}</h2>
+    <p>Pair once with a 4-digit code. Projects, prompts, references and generation status sync between devices. {isLocal?'Videos stay on your PC and open through Tailscale.':'RunPod connection and AI access sync too. Videos open while the pod and files are available.'}</p>
+    {pairing?<><p role="status">{busy?'Syncing…':'Device sync enabled'}{last&&!busy?' · '+new Date(last).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):''}</p><div className="device-sync-actions"><button className="button primary" disabled={busy||disabled} onClick={()=>void service.newInvite()}>Create 4-digit code</button><button className="button secondary" disabled={busy||disabled} onClick={()=>void service.refresh()}><RefreshCw size={15}/>Sync now</button><button className="text-button" disabled={busy} onClick={()=>service.disconnect()}>Disconnect this device</button></div></>:<>{isLocal&&<label className="field-label">PC Tailscale HTTPS address<input type="url" value={shareBase} onChange={e=>setShareBase(e.target.value)} placeholder="https://your-pc.tail123.ts.net" autoCapitalize="none" spellCheck={false}/></label>}<button className="button primary" disabled={busy||disabled||!!service.joining} onClick={()=>void service.create(shareBase)}>Create 4-digit code</button><label className="field-label">Or enter the code from your other device<input aria-label="4-digit pairing code" inputMode="numeric" autoComplete="off" maxLength={4} value={input} onChange={e=>setInput(e.target.value.replace(/\D/g,''))} placeholder="1234"/></label><button className="button secondary" disabled={busy||disabled||input.length!==4||!!service.joining} onClick={()=>void service.join(input)}>Pair device</button></>}
     {service.invite&&<div className="sync-pin"><strong>{service.invite.pin}</strong><p>Enter this code on your other device within 5 minutes.</p></div>}
     {service.pending&&!service.pending.approved&&<div className="sync-approval"><p>{service.pending.device} wants to connect. Approve only if you just entered this code on your other device.</p><button className="button primary" disabled={busy} onClick={()=>void service.approve()}>Approve device</button></div>}
     {service.joining&&<p role="status">Waiting for approval on the first device. <button className="text-button" onClick={service.cancelJoin}>Cancel</button></p>}
-    <p>Both devices need Tailscale connected and the same PC online. Project names, categories, reference additions/removals and Hide/Unhide sync too. Set or unlock a Hidden-folder PIN on each device to open hidden items. Device downloads stay local; removing a device copy keeps the shared project record.</p>
+    <p>{isLocal?'Both devices need Tailscale connected and the same PC online.':'Keep both devices paired to the same sync space. Approve new devices only when you requested pairing.'} {isLocal?'Project names, categories, reference additions/removals and Hide/Unhide sync too. Set or unlock a Hidden-folder PIN on each device to open hidden items.':'Hidden items stay private on this browser.'} Device downloads stay local; removing a device copy keeps the shared project record.</p>
     {status&&<p role="status">{status}</p>}{error&&<p className="error" role="alert">{error}</p>}
-  </section>;
-  return <section className="panel settings-connection device-sync-settings" aria-label="Device Sync">
-    <h2><Link2 size={19}/> Device Sync</h2>
-    <p>Pair your phone and laptop to share projects, prompts, references, running and queued shots, and completed creation links. Videos open from RunPod while their files are available.</p>
-    {pairing ? <>
-      <p role="status">{busy ? 'Syncing…' : 'Paired on this browser'}{last && !busy ? ' · ' + new Date(last).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}</p>
-      <div className="device-sync-actions">
-        <button className="button secondary" onClick={() => void copy()}><Copy size={15}/>Copy pairing code</button>
-        <button className="button secondary" disabled={busy || disabled} onClick={() => void service.refresh()}><RefreshCw size={15}/>Sync now</button>
-        <button className="text-button" disabled={busy} onClick={() => {service.disconnect();setReveal(false);setCopyNote('');setInput('');}}>Disconnect this device</button>
-      </div>
-      {reveal && <input aria-label="Your pairing code" readOnly value={pairing.code}/>}
-      {copyNote && <p role="status">{copyNote}</p>}
-    </> : <>
-      <button className="button primary" disabled={busy || disabled} onClick={() => void service.create()}>Create pairing code</button>
-      <label className="field-label">Pair with an existing device
-        <input type="password" value={input} onChange={e => setInput(e.target.value)} placeholder="Paste pairing code" autoComplete="off" spellCheck={false}/>
-      </label>
-      <button className="button secondary" disabled={busy || disabled || !input.trim()} onClick={() => void service.join(input)}>Pair device</button>
-    </>}
-    <p>Keep the code private. Hidden items and device-only files stay local. Removing a device copy does not remove a shared project record.</p>
-    {status && <p role="status">{status}</p>}
-    {error && <p className="error" role="alert">{error}</p>}
   </section>;
 }

@@ -14,7 +14,8 @@
     "test:device-cleanup": "node --experimental-strip-types scripts/check-device-cleanup.mjs",
     "test:local-models": "node scripts/check-local.mjs && node scripts/check-qwen-turbo.mjs",
     "test:workspace": "node scripts/check-workspace-focus.mjs && node scripts/check-media-poster.mjs && node scripts/check-file-export.mjs",
-    "test:sync-local": "node --experimental-strip-types scripts/check-local-sync.mjs && node scripts/check-device-pairing.mjs"
+    "test:sync-local": "node --experimental-strip-types scripts/check-local-sync.mjs && node scripts/check-device-pairing.mjs",
+    "test:runpod-settings": "node --experimental-strip-types scripts/check-shared-preferences.mjs && node scripts/check-ai-usage.mjs && node scripts/check-device-pairing.mjs"
   },
   "dependencies": {
     "@netlify/blobs": "11.1.8",
