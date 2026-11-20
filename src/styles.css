@@ -540,3 +540,13 @@
 
 :root .gallery-page .quick-hide{background:var(--panel);border-color:var(--line);color:var(--muted)}
 :root .gallery-page .quick-hide:hover{border-color:var(--accent);color:var(--accent)}
+
+/* Draft: elapsed/estimate cards and focused timing detail. */
+.shot-timing-trigger{display:grid;gap:6px;width:100%;min-width:0;padding:0;border:0;background:transparent;color:var(--text);text-align:left;cursor:pointer;font:inherit;border-radius:5px}
+.shot-timing-trigger:focus-visible{outline:2px solid var(--accent);outline-offset:5px}
+.shot-timing-title{display:block;color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.shot-timing-trigger .shot-progress>span{font-variant-numeric:tabular-nums}
+.workspace-timing-dialog{width:min(660px,100%);max-height:85dvh;overflow:auto;padding:0;background:var(--panel);color:var(--text)}
+.workspace-timing-dialog>header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 18px;border-bottom:1px solid var(--line)}
+.workspace-timing-dialog .timing-panel{margin:0;border:0;box-shadow:none}
+@media(max-width:800px){.local-scene-grid[data-columns="3"] .shot-timing-title{font-size:10px}.timing-dialog-backdrop{padding:16px 12px max(24px,env(safe-area-inset-bottom))}.workspace-timing-dialog{max-height:88dvh}}

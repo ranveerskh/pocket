@@ -1,3 +1,4 @@
+import Timing from './Timing';
 import {createPortal} from 'react-dom';
 import {isLocal,localStorage} from './local-mode';
 import {useEffect, useMemo, useRef, useState, type ReactNode} from 'react';
@@ -31,16 +32,16 @@ function Progress({job, average, now}: {job: Job; average?: number; now: number}
     submitting: isLocal?'Sending to PC':'Sending to RunPod',
     submission_unknown: 'Submission needs recovery',
     queued: job.queuePosition ? 'Queued #' + job.queuePosition : 'Queued',
-    running: 'Rendering · ' + timeLabel(timing.generation ?? timing.total),
+    running: (timing.generation === null ? '—' : timeLabel(timing.generation)) + ' / ' + (average ? timeLabel(average) : '—'),
     unknown: isLocal?'Checking PC status':'Checking RunPod status',
     complete: ready ? 'Ready' : 'Output unavailable',
     error: 'Failed',
     cancelled: 'Stopped',
   } as Record<string, string>)[job.state] || job.state;
   if (job.cancelRequested) status = isLocal?'Cancel pending · waiting for PC':'Cancel pending · waiting for RunPod';
-  else if (running && percent !== undefined) status += ' · estimated';
+
   return <div className="shot-progress">
-    <span>{status}</span>
+    <span title={running?'Generation elapsed / estimated total from latest matching runs':undefined}>{status}</span>
     {(running || ready || job.state === 'queued') &&
       <progress max={100} value={percent ?? (job.state === 'queued' ? 0 : undefined)} aria-label={status}/>}
     {job.error && !job.cancelRequested && <small>{job.error}</small>}
@@ -80,6 +81,8 @@ export default function ProjectWorkspace(p: Props) {
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState('');
+  const [timingSelection,setTimingSelection]=useState('');
+  const timingDialog=useRef<HTMLElement>(null);
   const [mobileComposer, setMobileComposer] = useState(false);
   const [sidebar, setSidebar] = useState(false);
   const [showComposer, setShowComposer] = useState(true);
@@ -95,6 +98,7 @@ export default function ProjectWorkspace(p: Props) {
   const query = search.trim().toLowerCase();
   const showing = query ? visible.filter(job => (creationLabel(job)+' '+creationTitle(job)).toLowerCase().includes(query)) : visible;
   const selectedJob = items.find(job => jobKey(job) === selected && job.files?.length);
+  const timingJob=items.find(job=>jobKey(job)===timingSelection);
   const running = queue.filter(job => job.state === 'running');
   const needsRecovery = queue.some(job => ['submitting', 'submission_unknown'].includes(job.state));
   const samples = useTimingHistory(p.jobs);
@@ -151,6 +155,13 @@ export default function ProjectWorkspace(p: Props) {
   },[pendingFocus,showing,limit]);
 
   useEffect(()=>{if(!selectedJob)return;const previous=document.body.style.overflow;const previousFocus=document.activeElement as HTMLElement|null;document.body.style.overflow='hidden';const close=(event:KeyboardEvent)=>{if(event.key==='Escape'&&!document.querySelector('.download-backdrop'))closePreviewRef.current();if(event.key==='Tab'&&!document.querySelector('.download-backdrop')){const elements=Array.from(preview.current?.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],input,select,video[controls]')||[]);const first=elements[0],last=elements[elements.length-1];if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}}};window.addEventListener('keydown',close);return()=>{document.body.style.overflow=previous;window.removeEventListener('keydown',close);previousFocus?.focus({preventScroll:true});};},[!!selectedJob]);
+  useEffect(()=>{
+    if(!timingJob)return;
+    const previous=document.activeElement as HTMLElement|null;
+    const overflow=document.body.style.overflow;document.body.style.overflow='hidden';
+    const onKey=(e:KeyboardEvent)=>{if(e.key==='Escape')setTimingSelection('');if(e.key==='Tab'){const buttons=Array.from(timingDialog.current?.querySelectorAll<HTMLElement>('button,summary,a[href]')||[]);const first=buttons[0],last=buttons[buttons.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}};
+    window.addEventListener('keydown',onKey);return()=>{document.body.style.overflow=overflow;window.removeEventListener('keydown',onKey);previous?.focus({preventScroll:true});};
+  },[!!timingJob]);
   const playable=showing.filter(job=>job.state==='complete'&&job.files?.length);
   const playingIndex=playable.findIndex(job=>jobKey(job)===selected);
   function nextClip(offset:number){const next=playable[playingIndex+offset];if(next)setSelected(jobKey(next));}
@@ -240,10 +251,13 @@ export default function ProjectWorkspace(p: Props) {
                 <MediaPoster job={job}/><span className="shot-preview-label"><Play size={16}/> Preview</span>
               </button>}
               <div className="workspace-shot-body">
-                <strong>{creationLabel(job)}</strong>
+                {job.state==='running'?<button className="shot-timing-trigger" aria-label={'Generation timing for '+creationLabel(job)} onClick={()=>{setMobileComposer(false);setTimingSelection(jobKey(job));}}>
+                  <strong>{creationLabel(job)}</strong><span className="shot-timing-title" title={creationTitle(job)}>{creationTitle(job)}</span>
+                  <Progress job={job} average={averages.get(timingBucket(job))} now={now}/>
+                </button>:<><strong>{creationLabel(job)}</strong>
                 <p title={creationTitle(job)}>{creationTitle(job)}</p>
                 {ready&&<DownloadButton job={job} className="text-button shot-save" label="Save"/>}
-                <Progress job={job} average={averages.get(timingBucket(job))} now={now}/>
+                <Progress job={job} average={averages.get(timingBucket(job))} now={now}/></>}
                 {(job.state === 'running' || job.state === 'queued') && <button className="text-button" disabled={p.cancelling.includes(job.id)} onClick={() => void p.onCancel(job)}>
                   <Square size={12}/>Stop
                 </button>}
@@ -280,6 +294,7 @@ export default function ProjectWorkspace(p: Props) {
         </div>
       </aside>
     </div>
+    {timingJob&&createPortal(<div className="local-preview-backdrop timing-dialog-backdrop" onClick={e=>{if(e.target===e.currentTarget)setTimingSelection('');}}><section ref={timingDialog} className="panel workspace-timing-dialog" role="dialog" aria-modal="true" aria-label={'Generation timing for '+creationLabel(timingJob)}><header><strong>{creationLabel(timingJob)}</strong><button autoFocus className="icon-button" aria-label="Close generation timing" onClick={()=>setTimingSelection('')}><X size={20}/></button></header><Timing jobs={p.jobs} candidate={timingJob} current={timingJob} elapsed={now}/></section></div>,document.body)}
     {selectedJob&&createPortal(<div className="local-preview-backdrop" onClick={e=>{if(e.target===e.currentTarget)closePreview();}}>{clipPreview}</div>,document.body)}
   </section>;
 }
