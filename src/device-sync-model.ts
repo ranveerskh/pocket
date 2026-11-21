@@ -54,7 +54,7 @@ function cleanJob(job: Job,scope:SyncScope='runpod',connection=''): Job | undefi
     startedAt:Number.isFinite(job.startedAt)?job.startedAt:undefined,
     queuePosition:Number.isFinite(job.queuePosition)?job.queuePosition:undefined,
     error:typeof job.error==='string'?job.error.slice(0,1000):undefined,
-    timingSource:job.timingSource==='server'||job.timingSource==='observed'?job.timingSource:undefined,
+    timingSource:job.timingSource==='server'||job.timingSource==='observed'||job.timingSource==='inferred'?job.timingSource:undefined,
     elapsedSeconds:Number.isFinite(job.elapsedSeconds)?job.elapsedSeconds:undefined,
     queueSeconds:Number.isFinite(job.queueSeconds)?job.queueSeconds:undefined,
     totalSeconds:Number.isFinite(job.totalSeconds)?job.totalSeconds:undefined,

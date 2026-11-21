@@ -107,6 +107,23 @@ export function historyTiming(item:any){
  const completedAt=timestamp(messages.find((m:any)=>Array.isArray(m)&&['execution_success','execution_error','execution_interrupted'].includes(m[0]))?.[1]?.timestamp);
  return {...(startedAt?{startedAt}:{}),...(startedAt&&completedAt&&completedAt>=startedAt?{completedAt,elapsedSeconds:(completedAt-startedAt)/1000}:{})};
 }
+// ComfyUI normally exposes execution_start only after a job enters history.
+// For a queued bulk successor, the previous completion provides an estimate
+// independent of whether a browser was awake. Never use page-resume time.
+export function runningTiming(id:string,queue:any,history:any,now=Date.now()){
+ const running=queue?.queue_running||[];
+ if(running.length!==1||running[0]?.[1]!==id)return {};
+ const current=running[0],meta=current[3]||{},submitted=Number(meta.pocket_submitted_at);
+ const candidates=Object.values(history||{}).flatMap((item:any)=>{
+  const timing=historyTiming(item),end=timing.completedAt;
+  const prior=item?.prompt,priorMeta=prior?.[3]||{};
+  const predecessor=meta.pocket_batch_id&&meta.pocket_batch_id===priorMeta.pocket_batch_id&&Number(priorMeta.pocket_item_index)===Number(meta.pocket_item_index)-1;
+  const queuedBeforeEnd=Number.isFinite(submitted)&&submitted>0&&end&&submitted<=end;
+  if(!end||end>now||(!predecessor&&!queuedBeforeEnd)||!Number.isFinite(current[0])||!Number.isFinite(prior?.[0])||prior[0]>=current[0])return [];
+  return [end];
+ });
+ return candidates.length?{startedAt:Math.max(...candidates),timingSource:'inferred' as const}:{};
+}
 export function videoFiles(item: any) {
   const results: any[] = [];
   for (const out of Object.values(item?.outputs || {}) as any[]) for (const list of Object.values(out)) if (Array.isArray(list)) for (const f of list) {

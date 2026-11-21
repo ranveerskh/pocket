@@ -32,7 +32,7 @@ function Progress({job, average, now}: {job: Job; average?: number; now: number}
     submitting: isLocal?'Sending to PC':'Sending to RunPod',
     submission_unknown: 'Submission needs recovery',
     queued: job.queuePosition ? 'Queued #' + job.queuePosition : 'Queued',
-    running: (timing.generation === null ? '—' : timeLabel(timing.generation)) + ' / ' + (average ? timeLabel(average) : '—'),
+    running: (timing.generation === null ? '—' : (job.timingSource==='inferred'?'≈ ':'')+timeLabel(timing.generation)) + ' / ' + (average ? timeLabel(average) : '—'),
     unknown: isLocal?'Checking PC status':'Checking RunPod status',
     complete: ready ? 'Ready' : 'Output unavailable',
     error: 'Failed',

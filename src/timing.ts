@@ -7,7 +7,7 @@ export function mergeTimingSamples(previous:TimingSample[],jobs:Job[]):TimingSam
  const hidden=new Set(jobs.filter(j=>j.hidden).map(j=>JSON.stringify([j.base,j.id])));
  const samples=new Map<string,TimingSample>();
  for(const sample of previous)if(sample&&typeof sample.id==='string'&&sample.id.length<1000&&typeof sample.bucket==='string'&&sample.bucket.length<1000&&Number.isFinite(sample.seconds)&&sample.seconds>=0&&Number.isFinite(sample.completedAt)&&!hidden.has(sample.id))samples.set(sample.id,sample);
- for(const j of jobs)if(!j.hidden&&j.state==='complete'&&j.timingSource&&typeof j.elapsedSeconds==='number'&&Number.isFinite(j.elapsedSeconds)&&j.elapsedSeconds>=0){const id=JSON.stringify([j.base,j.id]);samples.set(id,{id,bucket:timingBucket(j),seconds:j.elapsedSeconds,completedAt:j.completedAt||j.created});}
+ for(const j of jobs)if(!j.hidden&&j.state==='complete'&&j.timingSource&&j.timingSource!=='inferred'&&typeof j.elapsedSeconds==='number'&&Number.isFinite(j.elapsedSeconds)&&j.elapsedSeconds>=0){const id=JSON.stringify([j.base,j.id]);samples.set(id,{id,bucket:timingBucket(j),seconds:j.elapsedSeconds,completedAt:j.completedAt||j.created});}
  const counts=new Map<string,number>(),buckets=new Set<string>();
  return [...samples.values()].sort((a,b)=>b.completedAt-a.completedAt||a.id.localeCompare(b.id)).filter(s=>{if(!buckets.has(s.bucket)&&buckets.size>=32)return false;buckets.add(s.bucket);const count=counts.get(s.bucket)||0;if(count>=TIMING_LIMIT)return false;counts.set(s.bucket,count+1);return true;});
 }
@@ -17,11 +17,11 @@ export function timingStats(jobs:Job[],candidate:Job,saved:TimingSample[]=[]){co
 export function timeLabel(seconds:number){const n=Math.max(0,Math.round(seconds));return n<60?n+'s':Math.floor(n/60)+'m '+String(n%60).padStart(2,'0')+'s';}
 export function estimatedPercent(elapsed:number,last:number,complete=false){return complete?100:Math.max(0,Math.min(95,Math.round(elapsed/Math.max(1,last)*100)));}
 const positive=(v:unknown):v is number=>typeof v==='number'&&Number.isFinite(v)&&v>0;
-export function mergeJobStatus(job:Job,status:any,now=Date.now()):Job{
+export function mergeJobStatus(job:Job,status:any,now=Date.now(),continuous=true):Job{
  const next:Job={...job,state:status.state,files:status.files||job.files,error:status.error,queuePosition:status.state==='queued'?status.position:undefined};
  const serverStart=positive(status.startedAt)?status.startedAt:undefined;
- const start=serverStart||job.startedAt||(status.state==='running'?now:undefined);
- if(start){next.startedAt=start;next.timingSource=serverStart?'server':job.timingSource||'observed';next.queueSeconds=Math.max(0,(start-job.created)/1000);}
+ const start=serverStart||job.startedAt||(status.state==='running'&&job.state==='queued'&&continuous?now:undefined);
+ if(start){next.startedAt=start;next.timingSource=serverStart?(status.timingSource==='inferred'?'inferred':'server'):job.timingSource||'observed';next.queueSeconds=Math.max(0,(start-job.created)/1000);}
  if(status.state==='complete'){
   next.autoCopyPending=Boolean(next.files?.length);
   const end=positive(status.completedAt)?status.completedAt:job.completedAt||now;
@@ -35,7 +35,7 @@ export function mergeJobStatus(job:Job,status:any,now=Date.now()):Job{
 export function jobTiming(job:Job,now=Date.now()){
  const done=job.state==='complete',end=done?(job.completedAt||now):now;
  const generation=done?(job.timingSource&&typeof job.elapsedSeconds==='number'?job.elapsedSeconds:null):job.state==='running'&&job.startedAt?Math.max(0,(now-job.startedAt)/1000):null;
- const queue=job.queueSeconds??(job.startedAt?Math.max(0,(job.startedAt-job.created)/1000):!done?Math.max(0,(now-job.created)/1000):null);
+ const queue=job.queueSeconds??(job.startedAt?Math.max(0,(job.startedAt-job.created)/1000):!done&&job.state!=='running'?Math.max(0,(now-job.created)/1000):null);
  const total=job.totalSeconds??(done&&!job.timingSource&&typeof job.elapsedSeconds==='number'?job.elapsedSeconds:Math.max(0,(end-job.created)/1000));
  return{generation,queue,total};
 }

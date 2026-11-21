@@ -91,12 +91,16 @@ export default function Studio(){
  const refProfile=mode==='r2v'?'i'+vault.characters.filter(c=>activeCharacterIds.includes(c.id)&&c.image).length+'-a'+vault.characters.filter(c=>activeCharacterIds.includes(c.id)&&c.audio).length:undefined;
  const cancellationPending=jobs.some(j=>j.base===base&&j.cancelRequested);
  const bulkCancelStatus=bulkCancelMessage&&!bulkCancelBusy&&!jobs.some(j=>j.cancelRequested)&&!bulkCancelMessage.startsWith('Could not save')?'Bulk cancellation confirmed. Queued shots stopped.':bulkCancelMessage;
+ const statusPollAt=useRef(new Map<string,number>());
  const pendingKey=jobs.filter(j=>j.cancelRequested||['queued','running','unknown'].includes(j.state)).map(j=>j.id+(j.cancelRequested?'!':'')).join(',');
  useEffect(()=>{
   if(vault.legacyLocked||!pendingKey)return;
-  let gone=false;
+  let gone=false,polling=false,visibilityRevision=0;
   let timer:ReturnType<typeof setTimeout>;
   const poll=async()=>{
+   if(polling||gone)return;
+   if(document.hidden){statusPollAt.current.clear();if(!gone)timer=setTimeout(poll,5000);return;}
+   polling=true;
    try{
     const pending=jobs.filter(job=>job.cancelRequested||['queued','running','unknown'].includes(job.state));
     for(const url of new Set(pending.map(job=>job.base))){
@@ -110,21 +114,24 @@ export default function Studio(){
      }
      const ids=pending.filter(job=>job.base===url&&!job.cancelRequested).map(job=>job.id);
      for(const group of chunks(ids,100)){
+      const revision=visibilityRevision,observedAt=Date.now(),last=statusPollAt.current.get(url),continuous=!!last&&observedAt-last<20000;
       const data=await api(url,'statuses',{ids:group});
+      statusPollAt.current.set(url,observedAt);
       if(gone)return;
       setJobs(previous=>previous.map(job=>{
        const status=job.base===url?data.statuses[job.id]:undefined;
-       return status&&!job.cancelRequested&&['queued','running','unknown'].includes(job.state)?mergeJobStatus(job,status):job;
+       return status&&!job.cancelRequested&&['queued','running','unknown'].includes(job.state)?mergeJobStatus(job,status,Date.now(),continuous&&revision===visibilityRevision&&!document.hidden):job;
       }));
       const status=current?data.statuses[current]:undefined;
       if(status)setJobMessage(status.state==='queued'?'Waiting in queue · position '+status.position:status.state==='running'?'Generating on your RunPod GPU':status.state==='unknown'?'Job not found. Check this pod’s queue.':'');
      }
     }
-   }catch(error){if(!gone)setJobMessage('Connection interrupted. Cancellation requests will retry when RunPod is reachable. '+(error as Error).message);}
+   }catch(error){if(!gone)setJobMessage('Connection interrupted. Cancellation requests will retry when RunPod is reachable. '+(error as Error).message);}finally{polling=false;}
    if(!gone)timer=setTimeout(poll,5000);
   };
   void poll();
-  return()=>{gone=true;clearTimeout(timer);};
+  const resume=()=>{visibilityRevision++;statusPollAt.current.clear();if(!document.hidden){clearTimeout(timer);void poll();}};document.addEventListener('visibilitychange',resume);
+  return()=>{gone=true;clearTimeout(timer);document.removeEventListener('visibilitychange',resume);};
  },[pendingKey,vault.legacyLocked,current]);
  useEffect(()=>{function leave(){if(document.hidden){setPrivateOpen(false);setPrivatePrompt(false);setTab(t=>t==='private'?'library':t);}}document.addEventListener('visibilitychange',leave);return()=>document.removeEventListener('visibilitychange',leave);},[]);
 
