@@ -69,6 +69,12 @@ vm.runInNewContext(ts.transpile(fs.readFileSync('src/RunPodStatus.tsx','utf8'),{
 function nodes(node){return !node?[]:Array.isArray(node)?node.flatMap(nodes):typeof node==='object'?[node,...nodes(node.props?.children)]:[node];}
 const mockService={wallet:{balance:18.4,rate:2.2,updatedAt:1},autoStop:{state:'armed',pod:'abc123',message:'Waiting'},selected:'abc123',selectedPod:{name:'Film GPU'},configured:true,busy:false};
 const panel=panelScope.exports.default({service:mockService,connected:true,checking:false,open:true,onOpen:()=>{},onToggle:()=>{},onSettings:()=>{},disabled:false,queueBusy:false});
-assert.ok(nodes(panel).includes('RunPod · ≈8h 21m left'));assert.equal(nodes(panel).find(n=>n.props?.['aria-label']==='Auto-stop pod after queue finishes').props.checked,true);
-assert.equal(panelScope.exports.walletHours(5,0),'');assert.equal(panelScope.exports.walletHours(-1,2),'≈0h 0m left');
+assert.ok(nodes(panel).includes('RunPod · 8h 21m left'));assert.equal(nodes(panel).find(n=>n.props?.['aria-label']==='Auto-stop pod after queue finishes').props.checked,true);
+assert.equal(panelScope.exports.walletHours(5,0),'');assert.equal(panelScope.exports.walletHours(-1,2),'0h 0m left');
 console.log('Quick panel verified: compact balance hours, armed switch, zero-rate and exhausted-balance display.');
+
+for(const [balance,rate,warn] of [[9.99,2,true],[10,2,false],[0,2,true],[10,0,false]]){
+ const result=panelScope.exports.default({service:{...mockService,wallet:{balance,rate,updatedAt:1}},connected:true,checking:false,open:false,onOpen:()=>{}});
+ const button=nodes(result).find(n=>n.type==='button');assert.equal(button.props.className.includes('wallet-low'),warn,'Low-time signal threshold');
+}
+console.log('Wallet alert verified: below five hours red, exactly five hours normal, zero spend excluded, no approximate prefix.');

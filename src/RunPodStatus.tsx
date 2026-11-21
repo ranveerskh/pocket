@@ -2,14 +2,15 @@ import {useEffect,useRef} from 'react';
 import {ChevronRight,RefreshCw,X,Power,Link2,Check,Minus} from 'lucide-react';
 import type {usePodControls} from './PodControls';
 type Props={service:ReturnType<typeof usePodControls>;connected:boolean;checking:boolean;open:boolean;onOpen:(open:boolean)=>void;enabled:boolean;onToggle:()=>void;disabled:boolean;onSettings:()=>void;queueBusy:boolean};
-export function walletHours(balance:number,rate:number){if(rate<=0||!Number.isFinite(rate)||!Number.isFinite(balance))return '';const minutes=Math.max(0,Math.floor(balance/rate*60));return '≈'+Math.floor(minutes/60)+'h '+minutes%60+'m left';}
+export function walletHours(balance:number,rate:number){if(rate<=0||!Number.isFinite(rate)||!Number.isFinite(balance))return '';const minutes=Math.max(0,Math.floor(balance/rate*60));return Math.floor(minutes/60)+'h '+minutes%60+'m left';}
 export default function RunPodStatus(p:Props){
  const root=useRef<HTMLDivElement>(null),s=p.service;
  useEffect(()=>{if(!p.open)return;const close=(e:PointerEvent)=>{if(!root.current?.contains(e.target as Node))p.onOpen(false);};const escape=(e:KeyboardEvent)=>{if(e.key==='Escape')p.onOpen(false);};document.addEventListener('pointerdown',close);document.addEventListener('keydown',escape);return()=>{document.removeEventListener('pointerdown',close);document.removeEventListener('keydown',escape);};},[p.open]);
  const hours=s.wallet&&!s.walletError?walletHours(s.wallet.balance,s.wallet.rate):'';
+ const lowTime=!!hours&&!!s.wallet&&s.wallet.rate>0&&s.wallet.balance/s.wallet.rate<5;
  const connected=p.connected||p.checking;
  const armed=s.autoStop?.pod===s.selected&&s.autoStop&&['armed','idle','stopping'].includes(s.autoStop.state);
- return <div className="runpod-status" ref={root}><button className={'status '+(p.connected?'online':'')} aria-expanded={p.open} aria-controls="runpod-quick-panel" onClick={()=>{p.onOpen(!p.open);if(!p.open){void s.refresh();void s.refreshWallet();}}}><span className="dot"/>{p.checking?'Checking…':p.connected?(hours?'RunPod · '+hours:'RunPod connected'):'Connect RunPod'}<ChevronRight size={14}/></button>
+ return <div className="runpod-status" ref={root}><button className={'status '+(p.connected?'online':'')+(p.connected&&lowTime?' wallet-low':'')} title={p.connected&&lowTime?'Less than 5 hours of RunPod balance remaining at the current rate':undefined} aria-expanded={p.open} aria-controls="runpod-quick-panel" onClick={()=>{p.onOpen(!p.open);if(!p.open){void s.refresh();void s.refreshWallet();}}}><span className="dot"/>{p.checking?'Checking…':p.connected?(hours?'RunPod · '+hours:'RunPod connected'):'Connect RunPod'}<ChevronRight size={14}/></button>
  {p.open&&<section className="runpod-quick-panel panel" id="runpod-quick-panel" aria-label="RunPod quick controls"><div className="runpod-panel-heading"><strong>RunPod</strong><button className="icon-button" onClick={()=>p.onOpen(false)} aria-label="Close RunPod controls"><X size={18}/></button></div>
  <div className="runpod-wallet"><div><span>Balance · USD</span><strong>{s.wallet?'$'+s.wallet.balance.toFixed(2):'—'}</strong></div><div><span>Current spend</span><strong>{s.wallet?'$'+s.wallet.rate.toFixed(2)+'/hr':'—'}</strong></div></div>
  {s.wallet&&<small className="runpod-wallet-note">Account total: all pods and storage. Updated {new Date(s.wallet.updatedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}.</small>}

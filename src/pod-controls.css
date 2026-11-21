@@ -9,3 +9,5 @@
 .runpod-switch-track>span{display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--muted);color:var(--bg);transition:transform .15s}
 .runpod-switch-control input:checked+.runpod-switch-track{background:var(--accent);border-color:var(--accent)}.runpod-switch-control input:checked+.runpod-switch-track>span{transform:translateX(18px);background:var(--bg);color:var(--accent)}
 .runpod-switch-control input:focus-visible+.runpod-switch-track{outline:2px solid var(--accent);outline-offset:3px}.runpod-switch-control:has(input:disabled){cursor:default;opacity:.65}.runpod-switch-control input:disabled{cursor:default}
+
+.runpod-status>.status.wallet-low{border-color:#e05252;box-shadow:0 0 0 1px #e0525233;background:color-mix(in srgb,var(--panel) 90%,#e05252 10%)}.runpod-status>.status.wallet-low .dot{background:#ef4444;box-shadow:0 0 0 3px #ef444426}
