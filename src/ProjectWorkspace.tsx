@@ -2,12 +2,12 @@ import Timing from './Timing';
 import {createPortal} from 'react-dom';
 import {isLocal,localStorage} from './local-mode';
 import {useEffect, useMemo, useRef, useState, type ReactNode} from 'react';
-import {ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Film, Play, Plus, RotateCcw, Square, X} from 'lucide-react';
+import {ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Film, Clock3, Pause, Play, Plus, RotateCcw, Square, X} from 'lucide-react';
 import LocalMedia, {DeviceBadge} from './LocalMedia';
 import DownloadButton from './DownloadButton';
 import MediaPoster from './MediaPoster';
 import {creationLabel, creationTitle, galleryItems, type GallerySort} from './gallery-model';
-import {estimatedPercent, jobTiming, mergeTimingSamples, timeLabel, timingBucket, timingStats} from './timing';
+import {queueRemaining, queueClock, estimatedPercent, jobTiming, mergeTimingSamples, timeLabel, timingBucket, timingStats} from './timing';
 import {useTimingHistory} from './useTimingHistory';
 import type {Folder, Job} from './vault';
 import {canCancelBulk} from './bulk-cancel';
@@ -77,7 +77,7 @@ type Props = {
 };
 
 export default function ProjectWorkspace(p: Props) {
-  const [sceneColumns,setSceneColumns]=useState(()=>{try{const saved=localStorage.getItem('pocket-scene-columns');return ['1','2','3'].includes(saved||'')?saved!:'auto';}catch{return 'auto';}});
+  const [sceneColumns,setSceneColumns]=useState(()=>{try{const saved=localStorage.getItem('pocket-scene-columns');return ['1','2','3','4'].includes(saved||'')?saved!:'auto';}catch{return 'auto';}});
   const [sort,setSort]=useState<GallerySort>(()=>{try{const saved=localStorage.getItem('pocket-workspace-sort');return saved==='oldest'||saved==='newest'?saved:'scene';}catch{return 'scene';}});
   const [pendingFocus,setPendingFocus]=useState('');
   const [filter, setFilter] = useState<'scenes' | 'queue' | 'failed'>('scenes');
@@ -114,12 +114,14 @@ export default function ProjectWorkspace(p: Props) {
     return result;
   }, [samples, p.jobs]);
 
+  const remaining=queueRemaining(p.jobs,samples,now);
+  const activeRunning=p.jobs.filter(j=>!j.hidden&&j.state==='running').length;
   useEffect(() => {
-    if (!running.length) return;
+    if (!activeRunning) return;
     setNow(Date.now());
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [running.length]);
+  }, [activeRunning]);
   useEffect(() => {
     const position = scrollPositions.get(p.folder);
     setLimit(position?.limit ?? PAGE_SIZE);
@@ -197,21 +199,24 @@ export default function ProjectWorkspace(p: Props) {
 
   return <section className="project-workspace" aria-label="Project workspace">
     <header className="project-workspace-header">
-      <button className="button secondary workspace-back" aria-label="Back to projects" onClick={p.onProjects} disabled={p.busy}><ArrowLeft size={16}/><span>Projects</span></button>
-      <label className="workspace-project-select">
-        <span>Project</span>
-        <select aria-label="Current project" value={p.folder} disabled={p.busy} onChange={e => p.onFolder(e.target.value)}>
-          <option value="">Unfiled</option>
-          {p.folders.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
-        </select>
-      </label>
-      <button className="button secondary workspace-queue-link" onClick={() => setFilter('queue')}>
-        {running.length ? running.length + ' running' : 'Queue'} · {queue.length}
-      </button>
-      {<button className="button primary local-mobile-compose" onClick={compose}><Plus size={17}/>{p.bulk?'Bulk prompts':'Compose'}</button>}
-      {cancelCount>0&&<button className="button danger workspace-cancel-all" disabled={p.bulkCancelBusy||p.pauseBusy} onClick={()=>void p.onCancelBulk()}><Square size={14}/>{p.bulkCancelBusy?'Cancelling…':'Cancel all bulk · '+cancelCount}</button>}
+      <div className="workspace-project-row">
+       <div className="workspace-project-group">
+        <button className="button secondary workspace-back" aria-label="Back to projects" onClick={p.onProjects} disabled={p.busy}><ArrowLeft size={16}/></button>
+        <label className="workspace-project-select">
+         <select aria-label="Current project" value={p.folder} disabled={p.busy} onChange={e=>p.onFolder(e.target.value)}>
+          <option value="">Unfiled</option>{p.folders.map(folder=><option key={folder.id} value={folder.id}>{folder.name}</option>)}
+         </select>
+        </label>
+       </div>
+       <input type="search" aria-label="Find a scene" placeholder="Find a scene…" value={search} onChange={e=>{setSearch(e.target.value);setLimit(PAGE_SIZE);}}/>
+      </div>
+      <div className="workspace-action-row">
+       <time className="workspace-remaining" aria-label="Estimated time remaining for all running and queued generations" title={remaining.seconds===null?'Waiting for matching timing history or queue status':"Estimated remaining across all projects. Parallel pods overlap; paused shots excluded. Unknown start times use the full average. A plus means a running shot exceeded its estimate."}><Clock3 size={15}/>{remaining.seconds===null?'—:—':'≈ '+queueClock(remaining.seconds)+(remaining.overdue?'+':'')}</time>
+       <button className="button primary local-mobile-compose" onClick={compose}><Plus size={17}/>Compose</button>
+       {p.onPause&&<div className="workspace-pause-controls"><details><summary title="Pause or resume shots"><Pause size={14}/>Pause</summary><div className="workspace-pause-menu"><label className="field-label">Shots to control<select value={pauseBatch} onChange={e=>setPauseBatch(e.target.value)}><option value="">All shots in this project</option>{pauseBatches.map((id,i)=><option key={id} value={id}>Batch {i+1} · {new Date(items.find(j=>j.batchId===id)!.created).toLocaleString()}</option>)}</select></label><div className="workspace-pause-actions"><button className="button secondary" disabled={p.busy||p.pauseBusy||p.cancelling.length>0||!pauseItems.some(j=>['queued','running','unknown','pausing'].includes(j.state))} onClick={()=>void p.onPause?.(pauseItems,'after')}>Pause after current</button><button className="button secondary" disabled={p.busy||p.pauseBusy||p.cancelling.length>0||!pauseItems.some(j=>['queued','running','unknown','pausing'].includes(j.state))} onClick={()=>void p.onPause?.(pauseItems,'now')}>Pause all now</button><button className="button primary" disabled={p.busy||p.pauseBusy||p.cancelling.length>0||!pauseItems.some(j=>['paused','resuming'].includes(j.state))} onClick={()=>void p.onResume?.(pauseItems)}>Resume paused shots</button></div><p>Pause after current lets the running shot finish. Pause now restarts interrupted shots from the beginning when resumed. Wait for pause confirmation before stopping RunPod. Pod start never resumes shots automatically.</p></div></details></div>}
+       {cancelCount>0&&<button className="button danger workspace-cancel-all" disabled={p.bulkCancelBusy||p.pauseBusy} onClick={()=>void p.onCancelBulk()}><Square size={14}/>{p.bulkCancelBusy?'Cancelling…':'Cancel · '+cancelCount}</button>}
+      </div>
     </header>
-    {p.onPause&&<div className="workspace-pause-controls"><details><summary>Pause / Resume{items.some(j=>j.state==='paused')?' · '+items.filter(j=>j.state==='paused').length+' paused':''}</summary><label className="field-label">Shots to control<select value={pauseBatch} onChange={e=>setPauseBatch(e.target.value)}><option value="">All shots in this project</option>{pauseBatches.map((id,i)=><option key={id} value={id}>Batch {i+1} · {new Date(items.find(j=>j.batchId===id)!.created).toLocaleString()}</option>)}</select></label><div className="workspace-pause-actions"><button className="button secondary" disabled={p.busy||p.pauseBusy||p.cancelling.length>0||!pauseItems.some(j=>['queued','running','unknown','pausing'].includes(j.state))} onClick={()=>void p.onPause?.(pauseItems,'after')}>Pause after current</button><button className="button secondary" disabled={p.busy||p.pauseBusy||p.cancelling.length>0||!pauseItems.some(j=>['queued','running','unknown','pausing'].includes(j.state))} onClick={()=>void p.onPause?.(pauseItems,'now')}>Pause all now</button><button className="button primary" disabled={p.busy||p.pauseBusy||p.cancelling.length>0||!pauseItems.some(j=>['paused','resuming'].includes(j.state))} onClick={()=>void p.onResume?.(pauseItems)}>Resume paused shots</button></div><p>Pause after current lets the running shot finish. Pause now restarts interrupted shots from the beginning when resumed. Wait for pause confirmation before stopping RunPod. Pod start never resumes shots automatically.</p></details></div>}
     {p.pauseMessage&&<p className="bulk-cancel-note" role="status">{p.pauseMessage}</p>}
     {p.bulkCancelMessage&&<p className="bulk-cancel-note" role="status">{p.bulkCancelMessage}</p>}
     <div className={'project-workspace-columns' + (sidebar ? '' : ' sidebar-folded') + (showComposer ? '' : ' composer-folded')}>
@@ -235,8 +240,7 @@ export default function ProjectWorkspace(p: Props) {
          </div>
          <div className="workspace-view-tools">
           {<label className="local-scene-layout">Sort<select aria-label="Sort scenes" value={sort} onChange={e=>{const next=e.target.value as GallerySort;setSort(next);setLimit(PAGE_SIZE);try{localStorage.setItem('pocket-workspace-sort',next);}catch{}}}><option value="scene">Scene order</option><option value="oldest">Oldest first</option><option value="newest">Newest first</option></select></label>}
-          {<label className="local-scene-layout">Layout<select aria-label="Scene layout" value={sceneColumns} onChange={e=>{setSceneColumns(e.target.value);try{localStorage.setItem('pocket-scene-columns',e.target.value);}catch{}}}><option value="auto">Auto</option><option value="1">List</option><option value="2">2 columns</option><option value="3">3 columns</option></select></label>}
-          <input type="search" aria-label="Find a scene" placeholder="Find a scene…" value={search} onChange={e => {setSearch(e.target.value);setLimit(PAGE_SIZE);}}/>
+          {<label className="local-scene-layout">Layout<select aria-label="Scene layout" value={sceneColumns} onChange={e=>{setSceneColumns(e.target.value);try{localStorage.setItem('pocket-scene-columns',e.target.value);}catch{}}}><option value="auto">Auto</option><option value="1">List</option><option value="2">2 columns</option><option value="3">3 columns</option><option value="4">4 columns</option></select></label>}
          </div>
         </div>
         {p.connectionNote && queue.length > 0 && <p className="workspace-note" role="status">{p.connectionNote}</p>}
@@ -262,11 +266,13 @@ export default function ProjectWorkspace(p: Props) {
                 <p title={creationTitle(job)}>{creationTitle(job)}</p>
                 {ready&&<DownloadButton job={job} className="text-button shot-save" label="Save"/>}
                 <Progress job={job} average={averages.get(timingBucket(job))?.average} similar={averages.get(timingBucket(job))?.similar} now={now}/></>}
-                {p.onPause&&['running','queued','unknown','pausing'].includes(job.state)&&<button className="text-button" disabled={p.pauseBusy||p.busy||p.cancelling.length>0} onClick={()=>void p.onPause?.([job],'now')}>{job.state==='pausing'?'Retry Pause':'Pause'}</button>}
-                {p.onResume&&['paused','resuming'].includes(job.state)&&<button className="text-button" disabled={p.pauseBusy||p.busy||p.cancelling.length>0} onClick={()=>void p.onResume?.([job])}>{job.state==='resuming'?'Recover Resume':'Resume'}</button>}
+                <div className="shot-actions">
+                {p.onPause&&['running','queued','unknown','pausing'].includes(job.state)&&<button className="text-button" disabled={p.pauseBusy||p.busy||p.cancelling.length>0} onClick={()=>void p.onPause?.([job],'now')}><Pause size={12}/>{job.state==='pausing'?'Retry Pause':'Pause'}</button>}
+                {p.onResume&&['paused','resuming'].includes(job.state)&&<button className="text-button" disabled={p.pauseBusy||p.busy||p.cancelling.length>0} onClick={()=>void p.onResume?.([job])}><Play size={12}/>{job.state==='resuming'?'Recover Resume':'Resume'}</button>}
                 {(job.state === 'running' || job.state === 'queued') && <button className="text-button" disabled={p.pauseBusy||p.cancelling.includes(job.id)} onClick={() => void p.onCancel(job)}>
                   <Square size={12}/>Stop
                 </button>}
+                </div>
                 {FAILED.has(job.state) && <button className="text-button" disabled={p.busy} onClick={() => {p.onReuse(job); compose();}}>
                   <RotateCcw size={13}/>Reuse prompt
                 </button>}

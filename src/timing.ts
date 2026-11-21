@@ -53,3 +53,29 @@ export function pruneTimingHistory(jobs:Job[]){
  const keep=new Set(mergeTimingSamples([],jobs).map(s=>s.id));
  return jobs.map(j=>{if(typeof j.elapsedSeconds==='number'&&j.state==='complete'&&!keep.has(JSON.stringify([j.base,j.id]))){const {elapsedSeconds,startedAt,timingSource,queueSeconds,totalSeconds,...record}=j;return record;}return j;});
 }
+
+// ComfyUI executes each connection's queue serially; independent pods run in parallel.
+export function queueRemaining(jobs:Job[],saved:TimingSample[],now=Date.now()){
+ const active=jobs.filter(j=>!j.hidden&&['staging','submitting','submission_unknown','queued','running','unknown'].includes(j.state));
+ const history=mergeTimingSamples(saved,jobs),groups=new Map<string,{queued:number;running:number}>();
+ const averages=new Map<string,number|undefined>();
+ let missing=false,overdue=false;
+ for(const job of active){
+  const bucket=timingBucket(job);
+  if(!averages.has(bucket))averages.set(bucket,timingStats([],job,history)?.average);
+  const average=averages.get(bucket);
+  if(average===undefined||!['queued','running'].includes(job.state)){missing=true;continue;}
+  const group=groups.get(job.base)||{queued:0,running:0};
+  if(job.state==='running'){
+   const elapsed=jobTiming(job,now).generation;
+   if(elapsed!==null&&elapsed>=average)overdue=true;
+   group.running=Math.max(group.running,Math.max(0,average-(elapsed??0)));
+  }else group.queued+=average;
+  groups.set(job.base,group);
+ }
+ return{seconds:missing?null:Math.max(0,...[...groups.values()].map(g=>g.running+g.queued)),count:active.length,overdue};
+}
+export function queueClock(seconds:number){
+ const n=Math.max(0,Math.ceil(seconds)),hours=Math.floor(n/3600),minutes=Math.floor(n%3600/60),secs=String(n%60).padStart(2,'0');
+ return hours?hours+':'+String(minutes).padStart(2,'0')+':'+secs:minutes+':'+secs;
+}

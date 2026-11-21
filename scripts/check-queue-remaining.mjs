@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {queueRemaining,queueClock,timingBucket} from '../src/timing.ts';
+const base={id:'a',base:'pod-a',device:'gpu',workflowId:'r2v',duration:5,quality:'high',aspect:'landscape',created:1,state:'queued'};
+const saved=[{id:'old',bucket:timingBucket(base),seconds:100,completedAt:1},{id:'old-long',bucket:timingBucket({...base,duration:8}),seconds:160,completedAt:2}];
+const now=1_000_000,running={...base,state:'running',startedAt:now-40_000};
+assert.equal(queueRemaining([running,{...base,id:'b'},{...base,id:'c',duration:8}],saved,now).seconds,320);
+assert.equal(queueRemaining([running,{...base,id:'b',state:'paused'},{...base,id:'c',hidden:true}],saved,now).seconds,60);
+assert.equal(queueRemaining([base,{...base,id:'other',base:'pod-b'}],saved,now).seconds,100,'Independent connections run in parallel');
+assert.equal(queueRemaining([{...base,state:'running'}],saved,now).seconds,100,'Unknown start uses full estimate');
+assert.equal(queueRemaining([{...base,duration:10}],saved,now).seconds,null);
+assert.equal(queueRemaining([{...base,state:'submission_unknown'}],saved,now).seconds,null);
+const overdue=queueRemaining([{...running,startedAt:now-110_000}],saved,now);assert.equal(overdue.seconds,0);assert.equal(overdue.overdue,true);
+assert.equal(queueRemaining([],saved,now).seconds,0);
+assert.equal(queueClock(320),'5:20');assert.equal(queueClock(3661),'1:01:01');
+console.log('Queue clock: mixed durations, running elapsed, parallel pods, paused/hidden exclusion, missing history and unknown starts verified.');

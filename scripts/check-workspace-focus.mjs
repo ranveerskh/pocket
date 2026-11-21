@@ -9,7 +9,7 @@ function harness(local=true){
  const depsChanged=(a,b)=>!a||b.some((x,i)=>!Object.is(x,a[i]));
  const react={useState(initial){const i=cursor++;if(!(i in slots))slots[i]=typeof initial==='function'?initial():initial;return[slots[i],value=>{const next=typeof value==='function'?value(slots[i]):value;if(!Object.is(next,slots[i])){slots[i]=next;dirty=true;}}];},useRef(initial){const i=cursor++;return slots[i]??(slots[i]={current:initial});},useMemo(fn,deps){const i=cursor++;if(depsChanged(slots[i]?.deps,deps))slots[i]={deps,value:fn()};return slots[i].value;},useEffect(fn,deps){const i=cursor++;if(depsChanged(slots[i]?.deps,deps)){slots[i]?.cleanup?.();slots[i]={deps};effects.push(()=>{slots[i].cleanup=fn();});}}};
  const jsx=(type,props)=>({type,props:props||{}});
- const imports={'react':react,'react/jsx-runtime':{jsx,jsxs:jsx},'react-dom':{createPortal:x=>x},'./local-mode':{isLocal:local,localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v)}},'./gallery-model':gallery,'./timing':{mergeTimingSamples:()=>[],timingBucket:()=>'',timingStats:()=>null},'./useTimingHistory':{useTimingHistory:()=>[]},'./bulk-cancel':{canCancelBulk:()=>false}};
+ const imports={'react':react,'react/jsx-runtime':{jsx,jsxs:jsx},'react-dom':{createPortal:x=>x},'./local-mode':{isLocal:local,localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v)}},'./gallery-model':gallery,'./timing':{queueRemaining:()=>({seconds:null,count:0}),queueClock:()=>'',mergeTimingSamples:()=>[],timingBucket:()=>'',timingStats:()=>null},'./useTimingHistory':{useTimingHistory:()=>[]},'./bulk-cancel':{canCancelBulk:()=>false}};
  const scope={exports:{},require:name=>imports[name]||{},Date,Map,Set,Number,Math,setInterval:()=>1,clearInterval:()=>{},requestAnimationFrame:fn=>{frames.set(++frameId,fn);return frameId;},cancelAnimationFrame:id=>frames.delete(id),document:{body:{style:{}},activeElement:null,querySelector:()=>null,getElementById:id=>elements.get(id)},window:{addEventListener:()=>{},removeEventListener:()=>{},matchMedia:()=>({matches:true})}};
  vm.runInNewContext(ts.transpile(fs.readFileSync('src/ProjectWorkspace.tsx','utf8'),{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}),scope);
  function all(node){if(arguments.length===0)node=tree;if(!node)return[];if(Array.isArray(node))return node.flatMap(x=>all(x));if(typeof node!=='object')return[];return[node,...all(node.props?.children)];}
@@ -54,3 +54,14 @@ for(const local of [true,false]){
  assert.ok(find(n=>n.props?.id==='shot-scene-26'));assert.equal(view.scrolls.at(-1),'shot-scene-26','Close returns to current scene instead of the top');
  console.log((local?'Local':'RunPod')+' player navigation, shared sort/layout and return to paginated scene verified.');
 }
+
+const toolbar=harness();toolbar.render({...props,bulk:true,onPause:async()=>{},onResume:async()=>{}});
+const nodes=toolbar.all();
+assert.equal(nodes.filter(n=>n.props?.['aria-label']==='Find a scene').length,1);
+const projectRow=nodes.find(n=>n.props?.className==='workspace-project-row');
+assert.ok(projectRow);
+assert.ok(nodes.some(n=>n.type==='option'&&n.props.value==='4'),'Four-column layout available');
+const composeNode=nodes.find(n=>n.props?.className==='button primary local-mobile-compose');
+assert.ok(composeNode.props.children.includes('Compose'),'Bulk mode still labels the action Compose');
+assert.ok(!nodes.some(n=>n.props?.className==='button secondary workspace-queue-link'),'Redundant running badge removed');
+console.log('Workspace toolbar: one search, project row, compact Compose and four-column option verified.');
