@@ -1,0 +1,16 @@
+import fs from 'node:fs';import vm from 'node:vm';import ts from 'typescript';import assert from 'node:assert/strict';
+import * as timing from '../src/timing.ts';
+const jsx=(type,props)=>({type,props:props||{}}),modules={'react/jsx-runtime':{jsx,jsxs:jsx},'lucide-react':{},'./useTimingHistory':{useTimingHistory:()=>[]},'./timing':timing};
+const scope={exports:{},require:name=>modules[name]||{}};
+vm.runInNewContext(ts.transpile(fs.readFileSync('src/Timing.tsx','utf8'),{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}),scope);
+const base={id:'shot',base:'https://pod.proxy.runpod.net',prompt:'Scene',mode:'video',workflowId:'builtin-r2v',duration:5,quality:'high',aspect:'landscape',seed:1,device:'RTX 5090',created:Date.now()-216000,state:'running'};
+const jobs=Array.from({length:5},(_,i)=>({...base,id:'history-'+i,state:'complete',timingSource:'server',elapsedSeconds:358,completedAt:Date.now()-1000+i}));
+const render=(job,history=jobs)=>scope.exports.default({jobs:history,candidate:job,current:job,elapsed:0});
+const all=node=>Array.isArray(node)?node.flatMap(all):node&&typeof node==='object'?[node,...all(node.props?.children)]:[];
+const text=node=>Array.isArray(node)?node.map(text).join(''):node&&typeof node==='object'?text(node.props?.children):node==null?'':String(node);
+let tree=render(base),headline=all(tree).find(n=>n.props.className==='timing-current');assert.ok(text(headline).includes('≈ 5m 58s estimated total'),'Known average is visible at the top even without current start time');assert.ok(text(tree).includes('Elapsed time unavailable'));
+let progress=all(tree).find(n=>n.props.role==='progressbar');assert.equal(progress.props['aria-valuenow'],undefined,'An unknown elapsed time must not imply 0% measured progress');assert.ok(progress.props.className.includes('indeterminate'));
+tree=render({...base,startedAt:Date.now()-60000,timingSource:'server'});headline=all(tree).find(n=>n.props.className==='timing-current');assert.ok(text(headline).includes('1m 00s generation'),'Known elapsed time keeps its own label');assert.ok(!text(headline).includes('estimated total'));
+tree=render(base,[]);headline=all(tree).find(n=>n.props.className==='timing-current');assert.ok(text(headline).includes('— generation'),'No history never invents an estimate');
+tree=render({...base,state:'queued'});headline=all(tree).find(n=>n.props.className==='timing-current');assert.ok(text(headline).includes('waiting'),'Queue time stays separate');
+console.log('Timing display verified: historical estimate at top, unknown elapsed clearly labelled, indeterminate progress, known elapsed and no invented timings.');

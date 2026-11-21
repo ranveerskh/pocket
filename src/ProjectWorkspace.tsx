@@ -32,7 +32,7 @@ function Progress({job, average, similar, now}: {job: Job; average?: number; sim
     submitting: isLocal?'Sending to PC':'Sending to RunPod',
     submission_unknown: 'Submission needs recovery',
     queued: job.queuePosition ? 'Queued #' + job.queuePosition : 'Queued',
-    running: (timing.generation === null ? '—' : (job.timingSource==='inferred'?'≈ ':'')+timeLabel(timing.generation)) + ' / ' + (average ? (similar?'≈ ':'')+timeLabel(average) : '—'),
+    running: timing.generation===null&&average?'≈ '+timeLabel(average)+' estimated total':(timing.generation === null ? '—' : (job.timingSource==='inferred'?'≈ ':'')+timeLabel(timing.generation)) + ' / ' + (average ? (similar?'≈ ':'')+timeLabel(average) : '—'),
     unknown: isLocal?'Checking PC status':'Checking RunPod status',
     complete: ready ? 'Ready' : 'Output unavailable',
     error: 'Failed',
@@ -41,7 +41,7 @@ function Progress({job, average, similar, now}: {job: Job; average?: number; sim
   if (job.cancelRequested) status = isLocal?'Cancel pending · waiting for PC':'Cancel pending · waiting for RunPod';
 
   return <div className="shot-progress">
-    <span title={running?(similar?'Generation elapsed / approximate total from similar reference counts':'Generation elapsed / estimated total from latest matching runs'):undefined}>{status}</span>
+    <span title={running?(timing.generation===null?'Elapsed time unavailable; showing estimated total from previous completed runs':similar?'Generation elapsed / approximate total from similar reference counts':'Generation elapsed / estimated total from latest matching runs'):undefined}>{status}</span>
     {(running || ready || job.state === 'queued') &&
       <progress max={100} value={percent ?? (job.state === 'queued' ? 0 : undefined)} aria-label={status}/>}
     {job.error && !job.cancelRequested && <small>{job.error}</small>}
