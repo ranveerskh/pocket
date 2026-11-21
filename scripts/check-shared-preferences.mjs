@@ -16,3 +16,5 @@ const merged=await mergeSync({jobs:[],characters:[],folders:[]},opened,{});
 assert.equal(merged.changed,false,'Unchanged preferences must not cause endless sync writes');
 assert.deepEqual(merged.snapshot.preferences,newer);
 console.log('Shared preferences verified: encrypted token and connection, URL/token validation, latest change wins, and stable sync round trip.');
+
+const controls=cleanPreferences({pods:{value:'b'.repeat(64),at:now}});assert.equal(controls.pods.value,'b'.repeat(64));assert.deepEqual(cleanPreferences({pods:{value:'rpa-plain-secret',at:now}}),{});console.log('Pod access sync verified: only private capability tokens are accepted, never raw API keys.');

@@ -1,3 +1,4 @@
+import PodControls,{usePodControls} from './PodControls';
 import {useQueuePause,executionId} from './useQueuePause';
 import {sharePreference,readPreferences} from './sync-preferences';
 import {AISettings,ImprovePrompt,usePromptAssistant} from './PromptAssistant';
@@ -80,6 +81,7 @@ export default function Studio(){
  const [tab,setTab]=useState('library');const [base,setBase]=useState(isLocal?'http://127.0.0.1:8000':'');const [draftBase,setDraftBase]=useState(isLocal?'http://127.0.0.1:8000':'');const [connected,setConnected]=useState(false);const [checking,setChecking]=useState(false);const [device,setDevice]=useState('');const [turboReady,setTurboReady]=useState(false);
  const [negativePrompt,setNegativePrompt]=useState(''),[guidance,setGuidance]=useState(1);const [prompt,setPrompt]=useState('');const [duration,setDuration]=useState(5);const [aspect,setAspect]=useState('landscape');const [quality,setQuality]=useState('draft');const [turbo,setTurbo]=useState(false);const [seed,setSeed]=useState('');const [file,setFile]=useState<File|null>(null);const [preview,setPreview]=useState('');
  const queuePause=useQueuePause(vault);
+ const podPower=usePodControls({base,visible:tab==='settings',onReady:address=>{void connectModel(address,mode);},onStopped:address=>{if(base===address){connectionAttempt.current++;setConnected(false);setChecking(false);}}});
  const deviceSync=useDeviceSync(vault,{base,onVisibility:localMedia.setHidden,onConnection:address=>{setBase(address);setDraftBase(address);void connectModel(address,mode);}});
  const [current,setCurrent]=useState<string|null>(null);const [busy,setBusy]=useState(false);const [message,setMessage]=useState('');const [jobMessage,setJobMessage]=useState('');const [ready,setReady]=useState(false);const [advanced,setAdvanced]=useState(false);const [elapsed,setElapsed]=useState(0);const fileInput=useRef<HTMLInputElement>(null);
  const job=jobs.find(j=>j.id===current&&!j.hidden); const active=job&&['queued','running','unknown'].includes(job.state);const dims=size(quality,aspect);
@@ -142,7 +144,7 @@ export default function Studio(){
  async function connectModel(url:string,selectedMode:string,selectedTurbo=qwenTurbo){const attempt=++connectionAttempt.current;setChecking(true);setMessage('');setConnected(false);try{const origin=new URL(url.trim()).origin;const d=await api(origin,'connect',{mode:selectedMode,qwenTurbo:isLocal&&selectedMode==='qwen'&&selectedTurbo});if(attempt!==connectionAttempt.current)return;setBase(origin);setDraftBase(origin);setConnected(true);if(!isLocal)sharePreference('connection',origin);setDevice(d.device);setTurboReady(d.turboReady);if(!d.turboReady)setTurbo(false);}catch(e){if(attempt===connectionAttempt.current)setMessage((e as Error).message);}finally{if(attempt===connectionAttempt.current)setChecking(false);}}
  const localReconnectStarted=useRef(false);
  useEffect(()=>{if(!ready||localReconnectStarted.current)return;localReconnectStarted.current=true;try{const saved=JSON.parse(localStorage.getItem('pocket-settings')||'{}');const address=(!isLocal&&readPreferences().connection?.value)||saved.base;if(address)void connectModel(address,saved.mode||(isLocal?'image':'video'),saved.qwenTurbo===true);}catch{}},[ready]);
- useEffect(()=>{if(isLocal||!ready||connected||checking)return;const retry=()=>{const address=readPreferences().connection?.value;if(address&&!document.hidden)void connectModel(address,mode);};const timer=setInterval(retry,30000);window.addEventListener('online',retry);return()=>{clearInterval(timer);window.removeEventListener('online',retry);};},[ready,connected,checking,mode]);
+ useEffect(()=>{if(isLocal||!ready||connected||checking||podPower.pods.some(p=>p.status==='EXITED'&&base==='https://'+p.id+'-'+podPower.port+'.proxy.runpod.net'))return;const retry=()=>{const address=readPreferences().connection?.value;if(address&&!document.hidden)void connectModel(address,mode);};const timer=setInterval(retry,30000);window.addEventListener('online',retry);return()=>{clearInterval(timer);window.removeEventListener('online',retry);};},[ready,connected,checking,mode,podPower.pods,podPower.port]);
  async function connect(){await connectModel(draftBase,mode);}
  function switchMode(next:string,selectedQwenTurbo=qwenTurbo){if(next===mode)return;setMode(next);setAspect((next==='image'||next==='qwen')?'square':'landscape');setQuality((next==='image'||next==='qwen')?'high':'draft');setConnected(false);setFile(null);setCurrent(null);setMessage('');if(base)void connectModel(base,next,selectedQwenTurbo);}
  async function useAsReference(j:Job){if(!j.files?.length)return;setBusy(true);setMessage('');try{const blob=await localMedia.ensure(j,j.files[0]);if(blob.size>15*1024*1024)throw new Error('Reference image must be under 15 MB.');setMode('video');setCurrent(null);setPrompt('');setFile(new File([blob],j.files[0].filename,{type:blob.type}));setTab('create');if(base)await connectModel(base,'video');}catch(e){setMessage((e as Error).message);setTab('create');}finally{setBusy(false);}}
@@ -305,6 +307,7 @@ export default function Studio(){
    </button>
    {connected&&<p className="settings-connected" role="status"><Check size={16}/> Connected · {device}</p>}
   </section>
+  {!isLocal&&<PodControls service={podPower} disabled={lockedForSubmit||cancelling.length>0}/>}
   <DeviceSync service={deviceSync}/>
   <AISettings service={aiAssistant}/></div>
   <div className="settings-secondary"><ThemeSettings service={theme}/>

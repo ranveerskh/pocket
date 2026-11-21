@@ -17,7 +17,8 @@
     "test:sync-local": "node --experimental-strip-types scripts/check-local-sync.mjs && node scripts/check-device-pairing.mjs",
     "test:runpod-settings": "node --experimental-strip-types scripts/check-shared-preferences.mjs && node scripts/check-ai-usage.mjs && node scripts/check-device-pairing.mjs",
     "test:queue-pause": "node --experimental-strip-types scripts/check-queue-pause.mjs",
-    "test:timing": "node --experimental-strip-types scripts/check-timing-retention.mjs && node --experimental-strip-types scripts/check-background-timing.mjs"
+    "test:timing": "node --experimental-strip-types scripts/check-timing-retention.mjs && node --experimental-strip-types scripts/check-background-timing.mjs",
+    "test:pod-control": "node scripts/check-pod-control.mjs"
   },
   "dependencies": {
     "@netlify/blobs": "11.1.8",

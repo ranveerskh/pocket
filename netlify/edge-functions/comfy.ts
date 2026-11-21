@@ -17,6 +17,7 @@ export default async function comfy(req: Request) {
     }
     const p: any = await req.json(); const base = runpodURL(String(p.base || ''));
     if(['storage_status','storage_plan','storage_delete'].includes(p.action))return Response.json(await podStorage(base,p),{headers:{'Cache-Control':'no-store'}});
+    if(p.action==='ready'){await jsonUp(base,'/system_stats');return Response.json({ready:true},{headers:{'Cache-Control':'no-store'}});}
     if (p.action === 'connect') {
       const stats = await jsonUp(base,'/system_stats');
       const types = [...new Set(Object.values(makeWorkflow({prompt:'Connection check',duration:5,seed:1,quality:'draft',aspect:'landscape',mode:p.mode,custom:p.custom,preflight:true})).map((n: any)=>n.class_type))];
