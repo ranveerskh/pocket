@@ -6,14 +6,23 @@ export type TimingSample={id:string;bucket:string;seconds:number;completedAt:num
 export function mergeTimingSamples(previous:TimingSample[],jobs:Job[]):TimingSample[]{
  const hidden=new Set(jobs.filter(j=>j.hidden).map(j=>JSON.stringify([j.base,j.id])));
  const samples=new Map<string,TimingSample>();
- for(const sample of previous)if(sample&&typeof sample.id==='string'&&sample.id.length<1000&&typeof sample.bucket==='string'&&sample.bucket.length<1000&&Number.isFinite(sample.seconds)&&sample.seconds>=0&&Number.isFinite(sample.completedAt)&&!hidden.has(sample.id))samples.set(sample.id,sample);
+ for(const sample of previous)if(sample&&typeof sample.id==='string'&&sample.id.length<1000&&typeof sample.bucket==='string'&&sample.bucket.length<1000&&Number.isFinite(sample.seconds)&&sample.seconds>=0&&Number.isFinite(sample.completedAt)&&!hidden.has(sample.id)){const prior=samples.get(sample.id);if(!prior||sample.completedAt>=prior.completedAt)samples.set(sample.id,sample);}
  for(const j of jobs)if(!j.hidden&&j.state==='complete'&&j.timingSource&&j.timingSource!=='inferred'&&typeof j.elapsedSeconds==='number'&&Number.isFinite(j.elapsedSeconds)&&j.elapsedSeconds>=0){const id=JSON.stringify([j.base,j.id]);samples.set(id,{id,bucket:timingBucket(j),seconds:j.elapsedSeconds,completedAt:j.completedAt||j.created});}
- const counts=new Map<string,number>(),buckets=new Set<string>();
- return [...samples.values()].sort((a,b)=>b.completedAt-a.completedAt||a.id.localeCompare(b.id)).filter(s=>{if(!buckets.has(s.bucket)&&buckets.size>=32)return false;buckets.add(s.bucket);const count=counts.get(s.bucket)||0;if(count>=TIMING_LIMIT)return false;counts.set(s.bucket,count+1);return true;});
+ const counts=new Map<string,number>();
+ return [...samples.values()].sort((a,b)=>b.completedAt-a.completedAt||a.id.localeCompare(b.id)).filter(s=>{const count=counts.get(s.bucket)||0;if(count>=TIMING_LIMIT)return false;counts.set(s.bucket,count+1);return true;}).slice(0,2000);
 }
-export function readTimingSamples(storage:Pick<Storage,'getItem'>):TimingSample[]{try{const raw=storage.getItem(TIMING_STORAGE_KEY);if(!raw||raw.length>200000)return[];const value=JSON.parse(raw);return Array.isArray(value)?mergeTimingSamples(value,[]):[];}catch{return[];}}
+export function readTimingSamples(storage:Pick<Storage,'getItem'>):TimingSample[]{try{const raw=storage.getItem(TIMING_STORAGE_KEY);if(!raw||raw.length>2000000)return[];const value=JSON.parse(raw);return Array.isArray(value)?mergeTimingSamples(value,[]):[];}catch{return[];}}
 export function saveTimingSamples(storage:Pick<Storage,'setItem'>,samples:TimingSample[]){storage.setItem(TIMING_STORAGE_KEY,JSON.stringify(mergeTimingSamples(samples,[])));}
-export function timingStats(jobs:Job[],candidate:Job,saved:TimingSample[]=[]){const matches=mergeTimingSamples(saved,jobs).filter(s=>s.bucket===timingBucket(candidate)).slice(0,TIMING_LIMIT);if(!matches.length)return null;const times=matches.map(s=>s.seconds);return{count:times.length,last:times[0],average:times.reduce((a,b)=>a+b,0)/times.length,max:Math.max(...times)};}
+function comparableReferenceBucket(bucket:string){const fields=bucket.split('|');if(fields.length<8)return bucket;fields[6]='*';return fields.join('|');}
+export function timingStats(jobs:Job[],candidate:Job,saved:TimingSample[]=[]){
+ const all=mergeTimingSamples(saved,jobs),bucket=timingBucket(candidate);
+ const exact=all.filter(s=>s.bucket===bucket).slice(0,TIMING_LIMIT);
+ const similar=exact.length===0&&!!candidate.referenceUsed;
+ const matches=exact.length?exact:similar?all.filter(s=>comparableReferenceBucket(s.bucket)===comparableReferenceBucket(bucket)).slice(0,TIMING_LIMIT):[];
+ if(!matches.length)return null;
+ const times=matches.map(s=>s.seconds);
+ return{count:times.length,last:times[0],average:times.reduce((a,b)=>a+b,0)/times.length,max:Math.max(...times),similar};
+}
 export function timeLabel(seconds:number){const n=Math.max(0,Math.round(seconds));return n<60?n+'s':Math.floor(n/60)+'m '+String(n%60).padStart(2,'0')+'s';}
 export function estimatedPercent(elapsed:number,last:number,complete=false){return complete?100:Math.max(0,Math.min(95,Math.round(elapsed/Math.max(1,last)*100)));}
 const positive=(v:unknown):v is number=>typeof v==='number'&&Number.isFinite(v)&&v>0;

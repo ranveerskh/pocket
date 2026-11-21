@@ -7,7 +7,7 @@ import LocalMedia, {DeviceBadge} from './LocalMedia';
 import DownloadButton from './DownloadButton';
 import MediaPoster from './MediaPoster';
 import {creationLabel, creationTitle, galleryItems, type GallerySort} from './gallery-model';
-import {estimatedPercent, jobTiming, mergeTimingSamples, timeLabel, timingBucket} from './timing';
+import {estimatedPercent, jobTiming, mergeTimingSamples, timeLabel, timingBucket, timingStats} from './timing';
 import {useTimingHistory} from './useTimingHistory';
 import type {Folder, Job} from './vault';
 import {canCancelBulk} from './bulk-cancel';
@@ -20,7 +20,7 @@ function jobKey(job: Job) {
   return job.batchId ? job.batchId + ':' + job.batchIndex : job.id;
 }
 
-function Progress({job, average, now}: {job: Job; average?: number; now: number}) {
+function Progress({job, average, similar, now}: {job: Job; average?: number; similar?:boolean; now: number}) {
   const timing = jobTiming(job, now);
   const running = job.state === 'running';
   const ready = job.state === 'complete' && Boolean(job.files?.length);
@@ -32,7 +32,7 @@ function Progress({job, average, now}: {job: Job; average?: number; now: number}
     submitting: isLocal?'Sending to PC':'Sending to RunPod',
     submission_unknown: 'Submission needs recovery',
     queued: job.queuePosition ? 'Queued #' + job.queuePosition : 'Queued',
-    running: (timing.generation === null ? '—' : (job.timingSource==='inferred'?'≈ ':'')+timeLabel(timing.generation)) + ' / ' + (average ? timeLabel(average) : '—'),
+    running: (timing.generation === null ? '—' : (job.timingSource==='inferred'?'≈ ':'')+timeLabel(timing.generation)) + ' / ' + (average ? (similar?'≈ ':'')+timeLabel(average) : '—'),
     unknown: isLocal?'Checking PC status':'Checking RunPod status',
     complete: ready ? 'Ready' : 'Output unavailable',
     error: 'Failed',
@@ -41,7 +41,7 @@ function Progress({job, average, now}: {job: Job; average?: number; now: number}
   if (job.cancelRequested) status = isLocal?'Cancel pending · waiting for PC':'Cancel pending · waiting for RunPod';
 
   return <div className="shot-progress">
-    <span title={running?'Generation elapsed / estimated total from latest matching runs':undefined}>{status}</span>
+    <span title={running?(similar?'Generation elapsed / approximate total from similar reference counts':'Generation elapsed / estimated total from latest matching runs'):undefined}>{status}</span>
     {(running || ready || job.state === 'queued') &&
       <progress max={100} value={percent ?? (job.state === 'queued' ? 0 : undefined)} aria-label={status}/>}
     {job.error && !job.cancelRequested && <small>{job.error}</small>}
@@ -109,13 +109,9 @@ export default function ProjectWorkspace(p: Props) {
   const needsRecovery = queue.some(job => ['submitting', 'submission_unknown'].includes(job.state));
   const samples = useTimingHistory(p.jobs);
   const averages = useMemo(() => {
-    const buckets = new Map<string, number[]>();
-    for (const sample of mergeTimingSamples(samples, p.jobs)) {
-      const values = buckets.get(sample.bucket) ?? [];
-      values.push(sample.seconds);
-      buckets.set(sample.bucket, values);
-    }
-    return new Map(Array.from(buckets, ([key, values]) => [key, values.reduce((a, b) => a + b, 0) / values.length]));
+    const history=mergeTimingSamples(samples,p.jobs),result=new Map<string,ReturnType<typeof timingStats>>();
+    for(const job of p.jobs){const bucket=timingBucket(job);if(!result.has(bucket))result.set(bucket,timingStats([],job,history));}
+    return result;
   }, [samples, p.jobs]);
 
   useEffect(() => {
@@ -261,11 +257,11 @@ export default function ProjectWorkspace(p: Props) {
               <div className="workspace-shot-body">
                 {job.state==='running'?<button className="shot-timing-trigger" aria-label={'Generation timing for '+creationLabel(job)} onClick={()=>{setMobileComposer(false);setTimingSelection(jobKey(job));}}>
                   <strong>{creationLabel(job)}</strong><span className="shot-timing-title" title={creationTitle(job)}>{creationTitle(job)}</span>
-                  <Progress job={job} average={averages.get(timingBucket(job))} now={now}/>
+                  <Progress job={job} average={averages.get(timingBucket(job))?.average} similar={averages.get(timingBucket(job))?.similar} now={now}/>
                 </button>:<><strong>{creationLabel(job)}</strong>
                 <p title={creationTitle(job)}>{creationTitle(job)}</p>
                 {ready&&<DownloadButton job={job} className="text-button shot-save" label="Save"/>}
-                <Progress job={job} average={averages.get(timingBucket(job))} now={now}/></>}
+                <Progress job={job} average={averages.get(timingBucket(job))?.average} similar={averages.get(timingBucket(job))?.similar} now={now}/></>}
                 {p.onPause&&['running','queued','unknown','pausing'].includes(job.state)&&<button className="text-button" disabled={p.pauseBusy||p.busy||p.cancelling.length>0} onClick={()=>void p.onPause?.([job],'now')}>{job.state==='pausing'?'Retry Pause':'Pause'}</button>}
                 {p.onResume&&['paused','resuming'].includes(job.state)&&<button className="text-button" disabled={p.pauseBusy||p.busy||p.cancelling.length>0} onClick={()=>void p.onResume?.([job])}>{job.state==='resuming'?'Recover Resume':'Resume'}</button>}
                 {(job.state === 'running' || job.state === 'queued') && <button className="text-button" disabled={p.pauseBusy||p.cancelling.includes(job.id)} onClick={() => void p.onCancel(job)}>
