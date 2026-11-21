@@ -326,3 +326,45 @@ Validation: `npm run test:device-cleanup` tests device-only partial failures, de
 Settings → AI prompt assistant accepts an OpenAI API key and checks GPT-6 Luna access. Improve prompt is hidden until setup is confirmed. Each request sends only the current prompt and generation settings/reference names, without images, voice media, connection URLs, or conversation history. Review the result before using it; generation remains manual.
 
 The Netlify prompt-assistant function stores credentials encrypted with AES-GCM; the browser holds a random access token, excluded from project sync/ZIP exports. Removing the key deletes its server record. Configure each browser separately. Monthly USD usage estimates are saved only on this browser and are not the OpenAI invoice. The current rates are $0.10 input, $0.01 cached input and $0.50 output per million tokens. Netlify Functions and Blobs must be enabled.
+
+
+### RunPod wallet and unattended auto-stop
+
+The top RunPod button opens a compact wallet and connection panel. Account balance
+and current spend use the GraphQL `myself { clientBalance currentSpendPerHr }`
+query; power actions continue to use REST v2. The saved key needs account-read
+access for the balance, plus Pods read/write for power. Hours left are an estimate
+using the account-wide spend rate, including other pods and storage, in USD.
+Missing or denied balance access does not disable pod controls.
+
+After bulk submission finishes, turn on **Auto-stop after queue** for the named
+pod. It captures the live ComfyUI queue and stores a private server watch. The
+published Netlify `pod-watch` scheduled function checks once per minute without a
+browser. It waits for two empty checks at least 60 seconds apart, verifies tracked
+history, then rechecks the entire queue immediately before requesting **stop**.
+Successful jobs need saved output metadata; failed jobs also count as finished.
+Paused/interrupted or missing jobs block auto-stop. Unreachable queue/history is
+retried rather than interpreted as an empty queue. A stop never terminates a pod.
+
+The toggle is one-shot per queued run. Adding more work or pausing/resuming through
+the app first disarms the old watch; arm it again after the queue is ready. State
+is shared through the same private pod-control capability on paired devices. The
+worker retains this capability only while armed/recovering, in private Blobs, to
+decrypt the already encrypted API key; neither capability nor API key is returned
+in wallet/watch responses. Removing/replacing the key disables its watches.
+Conditional writes prevent overlapping workers or devices from winning the same
+stop lease. Lost stop replies recover through status reads and fresh queue checks.
+Watches expire after 48 hours. Each tick processes the three least recently checked
+active watches to bound runtime. Published production deploys run the schedule;
+previews/local dev do not. The UI exposes the last server check for verification.
+
+Stopping retains the pod's persistent output storage, not a phone download: the
+browser must be open to copy files to the device. Storage charges can continue
+while stopped. Quick disconnect controls only the app connection, not pod power,
+and remains off after refresh until explicitly reconnected.
+
+Validation: `npm run test:pod-control` exercises wallet redaction, credential
+handling, queue completion with failed jobs, concurrent workers, pause/missing
+protection, offline retry, disarm, final queue recheck and lost-reply recovery using
+mock APIs only. Verify the first server check and a short real queue after deploy
+before relying on it unattended. No real pod power changes were made by these tests.
