@@ -26,7 +26,7 @@ export function canonicalLocalData(data:SyncData,connection:string):SyncData {
  return {folders:data.folders,jobs:data.jobs.map(job=>localBase(job.base,base)?{...job,base}:job),characters:data.characters.map(character=>localBase(character.base,base)?{...character,base}:character)};
 }
 function cleanJob(job: Job,scope:SyncScope='runpod',connection=''): Job | undefined {
-  if (!validId(job.id) || (job.hidden && scope!=='local') || !['queued','running','unknown','complete','error','cancelled'].includes(job.state) || (scope==='local'?job.base!==connection:!validBase(job.base)) ||
+  if (!validId(job.id) || (job.hidden && scope!=='local') || !['queued','running','unknown','complete','error','cancelled','paused','pausing','resuming'].includes(job.state) || (scope==='local'?job.base!==connection:!validBase(job.base)) ||
     typeof job.prompt !== 'string' || job.prompt.length > 30_000 || (job.files!==undefined&&!Array.isArray(job.files)) ||
     job.id.startsWith('pending-') || !Number.isFinite(job.created) || !Number.isFinite(job.seed) || !Number.isFinite(job.duration)) return;
   const files = (job.files||[]).filter(file => file && file.type === 'output' && safePath(file.filename) &&
@@ -37,6 +37,8 @@ function cleanJob(job: Job,scope:SyncScope='runpod',connection=''): Job | undefi
   const {id, base, prompt, basePrompt, folder, seed, duration, aspect, quality, mode, workflowId, workflowName,
     created, completedAt, batchId, batchIndex, negativePrompt, guidance, referenceCharacterIds, turbo, templates} = job;
   return {
+    executionId:validId(job.executionId)?job.executionId:undefined,controlAt:Number.isFinite(job.controlAt)?job.controlAt:undefined,pauseMode:job.pauseMode==='now'||job.pauseMode==='after'?job.pauseMode:undefined,
+    resumeGraph:job.resumeGraph&&typeof job.resumeGraph==='object'&&!Array.isArray(job.resumeGraph)&&JSON.stringify(job.resumeGraph).length<=120000?job.resumeGraph:undefined,
     id, base, prompt, basePrompt: typeof basePrompt === 'string' ? basePrompt.slice(0, 20_000) : undefined,
     folder: validId(folder) ? folder : undefined, seed, duration,
     aspect: typeof aspect === 'string' ? aspect : 'landscape',
@@ -127,7 +129,9 @@ export async function mergeSync(local: SyncData, remote: SyncSnapshot, seen: See
       else if(localVisibility>remoteVisibility){existing.item={...existing.item,hidden:(record.item as Job).hidden,visibilityChangedAt:localVisibility};}
     }
     if(record.kind==='jobs'&&existing?.kind==='jobs'){
-      const rank=(state:string)=>state==='complete'?4:['error','cancelled'].includes(state)?3:state==='running'?2:state==='queued'?1:0;
+      const remoteControl=Number((existing.item as Job).controlAt)||0,localControl=Number((record.item as Job).controlAt)||0;
+      if(remoteControl>localControl)continue;if(localControl>remoteControl){shared.set(key,record);continue;}
+      const rank=(state:string)=>state==='complete'?6:state==='paused'?5:state==='resuming'?4:state==='pausing'?3.5:['error','cancelled'].includes(state)?3:state==='running'?2:state==='queued'?1:0;
       const remoteRank=rank((existing.item as Job).state),localRank=rank((record.item as Job).state);
       if(remoteRank>localRank)continue;
       if(localRank>remoteRank){shared.set(key,record);continue;}

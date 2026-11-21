@@ -11,9 +11,9 @@ export type BatchCancellation = {
 export function applyBatchCancellation(job: Job, base: string, result: BatchCancellation): Job {
   if (job.base !== base || !job.batchId || !result.batch_ids.includes(job.batchId) || !canCancelBulk(job)) return job;
   const item = result.items.find(item => item.id === job.id || (item.batchId === job.batchId && item.index === job.batchIndex));
-  if (item?.state === 'complete') return {...mergeJobStatus({...job, id:item.id}, item), cancelRequested:undefined};
+  if (item?.state === 'complete') return {...mergeJobStatus({...job, executionId:item.id}, item), cancelRequested:undefined};
   if (item && ['queued', 'running'].includes(item.state)) {
-    return {...job, id:item.id, state:item.state, cancelRequested:true, error:'Cancellation requested. Waiting for RunPod to stop this shot.'};
+    return {...job, executionId:item.id, state:item.state, cancelRequested:true, error:'Cancellation requested. Waiting for RunPod to stop this shot.'};
   }
-  return {...job, id:item?.id || job.id, state:'cancelled', cancelRequested:undefined, error:undefined, queuePosition:undefined};
+  return {...job, executionId:item?.id || job.executionId, state:'cancelled', cancelRequested:undefined, error:undefined, queuePosition:undefined};
 }

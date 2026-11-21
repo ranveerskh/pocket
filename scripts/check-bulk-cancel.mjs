@@ -45,7 +45,7 @@ const comfy = {
   historyTiming:() => ({}),
 };
 const route = compile('netlify/edge-functions/comfy.ts', {
-  '../../server/comfy.ts':comfy, '../../server/pod-storage.ts':{},
+  '../../server/comfy.ts':comfy, '../../server/pod-storage.ts':{}, '../../server/queue-pause.ts':{},
 }).default;
 async function cancel(batch_ids) {
   return route(new Request('https://studio.test/api/comfy', {

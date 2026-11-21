@@ -1,3 +1,4 @@
+import {pauseQueue} from '../../server/queue-pause.ts';
 import {podStorage} from '../../server/pod-storage.ts';
 import {jsonUp,runpodURL,makeWorkflow,videoFiles,historyTiming,runningTiming,upstream} from '../../server/comfy.ts';
 export default async function comfy(req: Request) {
@@ -32,6 +33,7 @@ export default async function comfy(req: Request) {
       const lora = loraInfo.LoraLoaderModelOnly?.input?.required?.lora_name?.[0] || [];
       return Response.json({connected:true,device:stats.devices?.[0]?.name || 'RunPod GPU',turboReady:lora.includes(p.mode==='r2v'?'minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors':'minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors')});
     }
+    if(p.action==='pause_prepare'||p.action==='pause_commit')return Response.json(await pauseQueue(base,p),{headers:{'Cache-Control':'no-store'}});
     if (p.action === 'cancel_batches') {
       if (!Array.isArray(p.batch_ids) || !p.batch_ids.length || p.batch_ids.length > 100 ||
         p.batch_ids.some((id: unknown) => typeof id !== 'string' || !/^[a-zA-Z0-9-]+$/.test(id))) {

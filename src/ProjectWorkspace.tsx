@@ -36,7 +36,7 @@ function Progress({job, average, now}: {job: Job; average?: number; now: number}
     unknown: isLocal?'Checking PC status':'Checking RunPod status',
     complete: ready ? 'Ready' : 'Output unavailable',
     error: 'Failed',
-    cancelled: 'Stopped',
+    cancelled: 'Stopped',paused:'Paused',pausing:'Confirming pause',resuming:'Recovering resume',
   } as Record<string, string>)[job.state] || job.state;
   if (job.cancelRequested) status = isLocal?'Cancel pending · waiting for PC':'Cancel pending · waiting for RunPod';
 
@@ -60,6 +60,9 @@ type Props = {
   onProjects: () => void;
   onManage: () => void;
   onReuse: (job: Job) => void;
+  onPause?:(jobs:Job[],mode:'now'|'after')=>Promise<void>;
+  onResume?:(jobs:Job[])=>Promise<void>;
+  pauseBusy?:boolean;pauseMessage?:string;
   onCancel: (job: Job) => Promise<void>;
   cancelling: string[];
   onCancelBulk: () => Promise<void>;
@@ -84,6 +87,7 @@ export default function ProjectWorkspace(p: Props) {
   const [timingSelection,setTimingSelection]=useState('');
   const timingDialog=useRef<HTMLElement>(null);
   const [mobileComposer, setMobileComposer] = useState(false);
+  const [pauseBatch,setPauseBatch]=useState('');
   const [sidebar, setSidebar] = useState(false);
   const [showComposer, setShowComposer] = useState(true);
   const [now, setNow] = useState(Date.now);
@@ -91,6 +95,8 @@ export default function ProjectWorkspace(p: Props) {
   const preview = useRef<HTMLElement>(null);
   const closePreviewRef=useRef<()=>void>(()=>{});
   const items = useMemo(() => galleryItems(p.jobs, p.folder || 'unfiled','all','',sort), [p.jobs, p.folder, sort]);
+  const pauseItems=items.filter(j=>!pauseBatch||j.batchId===pauseBatch);
+  const pauseBatches=[...new Set(items.filter(j=>j.batchId).map(j=>j.batchId!))];
   const queue = useMemo(() => items.filter(job => ACTIVE.has(job.state)), [items]);
   const cancelCount = items.filter(canCancelBulk).length;
   const failed = items.filter(job => FAILED.has(job.state));
@@ -207,8 +213,10 @@ export default function ProjectWorkspace(p: Props) {
         {running.length ? running.length + ' running' : 'Queue'} · {queue.length}
       </button>
       {<button className="button primary local-mobile-compose" onClick={compose}><Plus size={17}/>{p.bulk?'Bulk prompts':'Compose'}</button>}
-      {cancelCount>0&&<button className="button danger workspace-cancel-all" disabled={p.bulkCancelBusy} onClick={()=>void p.onCancelBulk()}><Square size={14}/>{p.bulkCancelBusy?'Cancelling…':'Cancel all bulk · '+cancelCount}</button>}
+      {cancelCount>0&&<button className="button danger workspace-cancel-all" disabled={p.bulkCancelBusy||p.pauseBusy} onClick={()=>void p.onCancelBulk()}><Square size={14}/>{p.bulkCancelBusy?'Cancelling…':'Cancel all bulk · '+cancelCount}</button>}
     </header>
+    {p.onPause&&<div className="workspace-pause-controls"><details><summary>Pause / Resume{items.some(j=>j.state==='paused')?' · '+items.filter(j=>j.state==='paused').length+' paused':''}</summary><label className="field-label">Shots to control<select value={pauseBatch} onChange={e=>setPauseBatch(e.target.value)}><option value="">All shots in this project</option>{pauseBatches.map((id,i)=><option key={id} value={id}>Batch {i+1} · {new Date(items.find(j=>j.batchId===id)!.created).toLocaleString()}</option>)}</select></label><div className="workspace-pause-actions"><button className="button secondary" disabled={p.busy||p.pauseBusy||p.cancelling.length>0||!pauseItems.some(j=>['queued','running','unknown','pausing'].includes(j.state))} onClick={()=>void p.onPause?.(pauseItems,'after')}>Pause after current</button><button className="button secondary" disabled={p.busy||p.pauseBusy||p.cancelling.length>0||!pauseItems.some(j=>['queued','running','unknown','pausing'].includes(j.state))} onClick={()=>void p.onPause?.(pauseItems,'now')}>Pause all now</button><button className="button primary" disabled={p.busy||p.pauseBusy||p.cancelling.length>0||!pauseItems.some(j=>['paused','resuming'].includes(j.state))} onClick={()=>void p.onResume?.(pauseItems)}>Resume paused shots</button></div><p>Pause after current lets the running shot finish. Pause now restarts interrupted shots from the beginning when resumed. Wait for pause confirmation before stopping RunPod. Pod start never resumes shots automatically.</p></details></div>}
+    {p.pauseMessage&&<p className="bulk-cancel-note" role="status">{p.pauseMessage}</p>}
     {p.bulkCancelMessage&&<p className="bulk-cancel-note" role="status">{p.bulkCancelMessage}</p>}
     <div className={'project-workspace-columns' + (sidebar ? '' : ' sidebar-folded') + (showComposer ? '' : ' composer-folded')}>
       <aside className="workspace-sidebar">
@@ -258,7 +266,9 @@ export default function ProjectWorkspace(p: Props) {
                 <p title={creationTitle(job)}>{creationTitle(job)}</p>
                 {ready&&<DownloadButton job={job} className="text-button shot-save" label="Save"/>}
                 <Progress job={job} average={averages.get(timingBucket(job))} now={now}/></>}
-                {(job.state === 'running' || job.state === 'queued') && <button className="text-button" disabled={p.cancelling.includes(job.id)} onClick={() => void p.onCancel(job)}>
+                {p.onPause&&['running','queued','unknown','pausing'].includes(job.state)&&<button className="text-button" disabled={p.pauseBusy||p.busy||p.cancelling.length>0} onClick={()=>void p.onPause?.([job],'now')}>{job.state==='pausing'?'Retry Pause':'Pause'}</button>}
+                {p.onResume&&['paused','resuming'].includes(job.state)&&<button className="text-button" disabled={p.pauseBusy||p.busy||p.cancelling.length>0} onClick={()=>void p.onResume?.([job])}>{job.state==='resuming'?'Recover Resume':'Resume'}</button>}
+                {(job.state === 'running' || job.state === 'queued') && <button className="text-button" disabled={p.pauseBusy||p.cancelling.includes(job.id)} onClick={() => void p.onCancel(job)}>
                   <Square size={12}/>Stop
                 </button>}
                 {FAILED.has(job.state) && <button className="text-button" disabled={p.busy} onClick={() => {p.onReuse(job); compose();}}>

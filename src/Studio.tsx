@@ -1,3 +1,4 @@
+import {useQueuePause,executionId} from './useQueuePause';
 import {sharePreference,readPreferences} from './sync-preferences';
 import {AISettings,ImprovePrompt,usePromptAssistant} from './PromptAssistant';
 import {mediaURL as resolveMediaURL, isLocal} from './local-mode';
@@ -78,6 +79,7 @@ export default function Studio(){
  const [mode,setMode]=useState(isLocal?'image':'video');const isQwen=mode==='qwen',isImage=mode==='image'||isQwen,isR2V=mode==='r2v';const qwenTurboEnabled=isLocal&&isQwen&&qwenTurbo;const modelName=isQwen?(qwenTurboEnabled?'Qwen Image 2.1 Turbo':'Qwen Image 2.1'):isImage?'Z-Image Turbo':isR2V?'MiniMax H3 R2V':'MiniMax H3 T2V';const workflowId=isR2V?'builtin-r2v':isQwen?(qwenTurboEnabled?'builtin-qwen-image21-turbo':'builtin-qwen-image21'):undefined;const supportsReference=mode==='video';
  const [tab,setTab]=useState('library');const [base,setBase]=useState(isLocal?'http://127.0.0.1:8000':'');const [draftBase,setDraftBase]=useState(isLocal?'http://127.0.0.1:8000':'');const [connected,setConnected]=useState(false);const [checking,setChecking]=useState(false);const [device,setDevice]=useState('');const [turboReady,setTurboReady]=useState(false);
  const [negativePrompt,setNegativePrompt]=useState(''),[guidance,setGuidance]=useState(1);const [prompt,setPrompt]=useState('');const [duration,setDuration]=useState(5);const [aspect,setAspect]=useState('landscape');const [quality,setQuality]=useState('draft');const [turbo,setTurbo]=useState(false);const [seed,setSeed]=useState('');const [file,setFile]=useState<File|null>(null);const [preview,setPreview]=useState('');
+ const queuePause=useQueuePause(vault);
  const deviceSync=useDeviceSync(vault,{base,onVisibility:localMedia.setHidden,onConnection:address=>{setBase(address);setDraftBase(address);void connectModel(address,mode);}});
  const [current,setCurrent]=useState<string|null>(null);const [busy,setBusy]=useState(false);const [message,setMessage]=useState('');const [jobMessage,setJobMessage]=useState('');const [ready,setReady]=useState(false);const [advanced,setAdvanced]=useState(false);const [elapsed,setElapsed]=useState(0);const fileInput=useRef<HTMLInputElement>(null);
  const job=jobs.find(j=>j.id===current&&!j.hidden); const active=job&&['queued','running','unknown'].includes(job.state);const dims=size(quality,aspect);
@@ -112,17 +114,17 @@ export default function Studio(){
        setJobs(previous=>previous.map(job=>applyBatchCancellation(job,url,result)));
       }
      }
-     const ids=pending.filter(job=>job.base===url&&!job.cancelRequested).map(job=>job.id);
+     const ids=pending.filter(job=>job.base===url&&!job.cancelRequested).map(executionId);
      for(const group of chunks(ids,100)){
       const revision=visibilityRevision,observedAt=Date.now(),last=statusPollAt.current.get(url),continuous=!!last&&observedAt-last<20000;
       const data=await api(url,'statuses',{ids:group});
       statusPollAt.current.set(url,observedAt);
       if(gone)return;
       setJobs(previous=>previous.map(job=>{
-       const status=job.base===url?data.statuses[job.id]:undefined;
+       const status=job.base===url?data.statuses[executionId(job)]:undefined;
        return status&&!job.cancelRequested&&['queued','running','unknown'].includes(job.state)?mergeJobStatus(job,status,Date.now(),continuous&&revision===visibilityRevision&&!document.hidden):job;
       }));
-      const status=current?data.statuses[current]:undefined;
+      const selected=pending.find(j=>j.id===current);const status=selected?data.statuses[executionId(selected)]:undefined;
       if(status)setJobMessage(status.state==='queued'?'Waiting in queue · position '+status.position:status.state==='running'?'Generating on your RunPod GPU':status.state==='unknown'?'Job not found. Check this pod’s queue.':'');
      }
     }
@@ -159,7 +161,7 @@ export default function Studio(){
  }catch(e){setBulkState({adding:false,added,total:prompts.length,error:(e as Error).message,finished:false});}finally{bulkRequest.current=null;setJobs(prev=>prev.map(j=>j.batchId===batchId&&j.state==='staging'?{...j,state:'cancelled',cancelRequested:undefined}:j));}}
  async function recoverBulk(){setRecovering(true);try{const pending=jobs.filter(j=>j.batchId&&!j.cancelRequested&&['submitting','submission_unknown'].includes(j.state));const batches=[...new Set(pending.map(j=>j.base+'|'+j.batchId))];for(const key of batches){const [url,batchId]=key.split('|');const d=await api(url,'recover_batch',{batch_id:batchId});setJobs(prev=>prev.map(j=>{if(j.batchId!==batchId||j.base!==url||j.cancelRequested||!['submitting','submission_unknown'].includes(j.state))return j;const found=d.items.find((x:any)=>x.index===j.batchIndex);return found?{...j,id:found.id,state:'queued'}:j;}));}setBulkState(prev=>({...prev,error:'Queue status recovered where available. Unconfirmed items were not automatically resubmitted.'}));}catch(e){setBulkState(prev=>({...prev,error:(e as Error).message}));}finally{setRecovering(false);}}
  async function cancelBulk(batchId?:string){
-  if(cancelInFlight.current||vault.legacyLocked||!vault.loaded)return;
+  if(queuePause.busy||cancelInFlight.current||vault.legacyLocked||!vault.loaded)return;
   const targets=jobs.filter(job=>!job.hidden&&(job.folder||'')===saveFolder&&canCancelBulk(job)&&(!batchId||job.batchId===batchId));
   if(!targets.length)return;
   const groups=new Map<string,string[]>();
@@ -190,10 +192,10 @@ export default function Studio(){
   finally{cancelInFlight.current=false;setBulkCancelBusy(false);}
  }
  async function cancel(target:Job){
-  if(cancelling.includes(target.id))return;
+  if(queuePause.busy||cancelling.includes(target.id))return;
   setCancelling(ids=>[...ids,target.id]);
   try{
-   await api(target.base,'cancel',{id:target.id});
+   await api(target.base,'cancel',{id:executionId(target)});
    setJobs(prev=>prev.map(j=>j.id===target.id&&j.base===target.base&&['queued','running','unknown'].includes(j.state)?{...j,state:'cancelled'}:j));
   }catch(e){setJobMessage('Could not stop this generation. '+(e as Error).message);}
   finally{setCancelling(ids=>ids.filter(id=>id!==target.id));}
@@ -206,7 +208,7 @@ export default function Studio(){
  const recentJob=job&&(job.folder||'')===saveFolder?job:
   jobs.find(item=>!item.hidden&&(item.folder||'')===saveFolder);
  useEffect(()=>{if(!isLocal)pageRef.current?.scrollTo(0,0);else window.scrollTo(0,0);},[tab]);
- const lockedForSubmit=busy||refBusy||checking||bulkState.adding||bulkCancelBusy;
+ const lockedForSubmit=busy||refBusy||checking||bulkState.adding||bulkCancelBusy||queuePause.busy;
  function openProject(project?:string){setSaveFolder(project||'');setMessage('');setTab('create');}
  function openCreate(project?:string){setSaveFolder(project||'');setMessage('');setTab('standalone');}
  const nav=[
@@ -246,6 +248,10 @@ export default function Studio(){
    onMode={bulk=>setTab(bulk?'bulk':'create')}
    onProjects={()=>{setMediaProject('');setTab('library');}}
    onManage={()=>{setMediaProject(saveFolder||'unfiled');setTab('library');}}
+   onPause={isLocal?undefined:queuePause.pause}
+   onResume={isLocal?undefined:queuePause.resume}
+   pauseBusy={queuePause.busy}
+   pauseMessage={queuePause.message}
    onReuse={reuse}
    onCancel={cancel}
    onCancelBulk={cancelBulk}
