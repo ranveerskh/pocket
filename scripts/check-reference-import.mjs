@@ -44,3 +44,12 @@ editorRender();nodes().find(n=>n.type==='button').props.onClick();editorRender()
 await nodes().find(n=>n.type==='button'&&nodes(n).includes('Paste')).props.onClick();editorRender();edited=undefined;
 nodes().find(n=>n.type==='button'&&nodes(n).includes('Save name')).props.onClick();editorRender();assert.equal(edited,undefined);assert.ok(nodes().some(n=>n.props?.role==='alert'));
 console.log('Reference name editing verified: whole-name Paste replacement, existing media/ID preservation and duplicate-name rejection.');
+slots=[];deps=[];effects=[];cleanups.length=0;let confirmed=false,removed=[];
+const refScope={exports:{},require:name=>name==='react'?{...react,useCallback:fn=>fn}:name==='react/jsx-runtime'?{jsx,jsxs:jsx}:name==='./reference-model'?{currentCharacterIds:(chars,ids,base)=>ids.filter(id=>chars.some(c=>c.id===id&&c.base===base)),characterReferences:()=>({images:[],audios:[]})}:name==='./reference-import'?model:{},confirm:()=>confirmed,AbortController,navigator:{}};
+vm.runInNewContext(ts.transpile(fs.readFileSync('src/CharacterReferences.tsx','utf8'),{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}),refScope);
+let refProps={characters:[{id:'a',base:'pod-a',name:'A'},{id:'b',base:'pod-a',name:'B'},{id:'other',base:'pod-b',name:'Other'}],selected:['a','b','other'],base:'pod-a',connected:true,disabled:false,locked:false,onRemoveAll:ids=>removed=ids,onBusy:()=>{}};
+function refRender(){cursor=0;tree=refScope.exports.default(refProps);effects.splice(0).forEach(fn=>fn());}
+refRender();const removeAll=()=>nodes().find(n=>n.type==='button'&&nodes(n).includes('Remove all references')).props.onClick();
+removeAll();assert.equal(removed.length,0,'Cancelling confirmation preserves references');confirmed=true;removeAll();assert.equal(JSON.stringify(removed),'["a","b"]','Remove all targets current connection only');
+removed=[];refProps={...refProps,disabled:true};refRender();removeAll();assert.equal(removed.length,0,'Busy controls cannot clear references');
+console.log('Remove-all verified: confirmation cancellation, current-connection scope and busy guard. Uploaded files are never touched.');
