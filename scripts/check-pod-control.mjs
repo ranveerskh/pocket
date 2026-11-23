@@ -78,3 +78,10 @@ for(const [balance,rate,warn] of [[9.99,2,true],[10,2,false],[0,2,true],[10,0,fa
  const button=nodes(result).find(n=>n.type==='button');assert.equal(button.props.className.includes('wallet-low'),warn,'Low-time signal threshold');
 }
 console.log('Wallet alert verified: below five hours red, exactly five hours normal, zero spend excluded, no approximate prefix.');
+
+let quickStarts=[];
+const quickProps={service:{...mockService,port:'8188',selectedPod:{id:'last-selected',name:'Last selected GPU',status:'EXITED',actions:['start']},action:async value=>quickStarts.push(value)},connected:false,checking:false,open:true,onOpen:()=>{},onToggle:()=>{},onSettings:()=>{},disabled:false,queueBusy:false};
+const quickPanel=panelScope.exports.default(quickProps),quickButton=nodes(quickPanel).find(n=>n.props?.className==='button primary');
+assert.equal(quickButton.props.disabled,false);quickButton.props.onClick();assert.deepEqual(quickStarts,['start']);assert.ok(!nodes(quickPanel).some(n=>n.type==='select'),'Quick panel does not expose pod selection/settings');
+const runningPanel=panelScope.exports.default({...quickProps,service:{...quickProps.service,selectedPod:{...quickProps.service.selectedPod,status:'RUNNING',actions:['stop']}}});assert.equal(nodes(runningPanel).find(n=>n.props?.className==='button primary').props.disabled,true);
+console.log('Quick Start verified: explicit Start action, no pod picker, and disabled for an already-running pod.');
