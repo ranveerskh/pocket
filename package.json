@@ -19,6 +19,7 @@
     "test:queue-pause": "node --experimental-strip-types scripts/check-queue-pause.mjs",
     "test:timing": "node --experimental-strip-types scripts/check-queue-remaining.mjs && node --experimental-strip-types scripts/check-timing-retention.mjs && node --experimental-strip-types scripts/check-background-timing.mjs && node --experimental-strip-types scripts/check-timing-display.mjs",
     "test:pod-control": "node scripts/check-pod-control.mjs",
+    "test:references": "node --experimental-strip-types scripts/check-reference-import.mjs && node scripts/check-workflows.mjs",
     "test:compose": "node --experimental-strip-types scripts/check-compose-controls.mjs"
   },
   "dependencies": {

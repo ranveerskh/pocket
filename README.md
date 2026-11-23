@@ -368,3 +368,22 @@ handling, queue completion with failed jobs, concurrent workers, pause/missing
 protection, offline retry, disarm, final queue recheck and lost-reply recovery using
 mock APIs only. Verify the first server check and a short real queue after deploy
 before relying on it unattended. No real pod power changes were made by these tests.
+
+
+### Import a cast of reference photos
+
+In Create/Compose → Character references, choose **Add multiple photos**. Select
+up to 20 JPG/PNG/WebP photos (15 MB per file, 150 MB per batch), then review each
+preview and editable character name. Names start from filenames; each row has a
+Paste action. Duplicate/blank names and unsupported files must be corrected or
+removed before upload. Existing character names are checked on the active pod.
+Photos upload sequentially. Each success is saved immediately; Retry remaining
+uploads only failures, preserving saved records and stable IDs. Changing the pod,
+locking the gallery or closing the importer aborts unfinished uploads. Existing
+single-character photo/voice setup remains available and also has Paste for names.
+
+Importing a cast does not select every reference for each shot. Keep using
+`CHARACTERS: Martha Young | Rose Young`; the planner still chooses and numbers up
+to three characters per shot. Manual checkbox choices are unchanged by batch
+import. Uploaded files remain in the pod input folder if a browser record is removed.
+Validate with `npm run test:references` (mocked uploads; no GPU jobs).
