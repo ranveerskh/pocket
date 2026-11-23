@@ -1,0 +1,13 @@
+import {useEffect,useRef,useState} from 'react';
+import {Check,Copy,Pencil,X} from 'lucide-react';
+import type {Character} from './reference-model';
+export default function ReferenceNameEditor({character,characters,disabled,onSave}:{character:Character;characters:Character[];disabled:boolean;onSave:(c:Character)=>void}){
+ const [editing,setEditing]=useState(false),[name,setName]=useState(character.name),[error,setError]=useState('');
+ const revision=useRef(0),live=useRef({character,disabled,editing});live.current={character,disabled,editing};
+ useEffect(()=>{setName(character.name);setError('');revision.current++;},[character.id,character.name]);
+ useEffect(()=>()=>{revision.current++;},[]);
+ function close(){revision.current++;setEditing(false);setName(character.name);setError('');}
+ async function paste(){const attempt=revision.current;try{const text=await navigator.clipboard.readText();if(attempt===revision.current&&live.current.editing&&!live.current.disabled){setName(text.trim().slice(0,60));setError('');}}catch{if(attempt===revision.current)setError('Clipboard unavailable. Paste into the name field manually.');}}
+ function save(){const value=name.trim(),key=value.normalize('NFKC').toLocaleLowerCase();if(!value||value.length>60||/[\r\n|]/.test(value)){setError('Use a name of 1–60 characters, without | or line breaks.');return;}if(characters.some(c=>c.base===character.base&&c.id!==character.id&&c.name.trim().normalize('NFKC').toLocaleLowerCase()===key)){setError('Another reference already uses this name. Choose a unique name.');return;}onSave({...character,name:value});setEditing(false);setError('');}
+ return editing?<div className="reference-name-editor"><label htmlFor={'edit-name-'+character.id}>Character name</label><div className="reference-import-name"><input id={'edit-name-'+character.id} value={name} maxLength={60} disabled={disabled} onChange={e=>setName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();save();}if(e.key==='Escape')close();}}/><button className="text-button" disabled={disabled} onClick={paste}><Copy size={13}/>Paste</button></div><div className="reference-name-actions"><button className="text-button" disabled={disabled} onClick={save}><Check size={13}/>Save name</button><button className="text-button" disabled={disabled} onClick={close}><X size={13}/>Cancel</button></div>{error&&<small className="error" role="alert">{error}</small>}</div>:<button className="text-button reference-edit-name" disabled={disabled} onClick={()=>{setName(character.name);setError('');setEditing(true);}}><Pencil size={13}/>Edit name</button>;
+}

@@ -29,3 +29,18 @@ try{
  const pending=save().props.onClick();props={...props,base:'https://pod-c-8188.proxy.runpod.net'};render();release();await pending;render();assert.equal(records.length,11,'Connection change aborts before creating a reference record');
 }finally{globalThis.fetch=previousFetch;cleanups.forEach(fn=>fn?.());}
 console.log('Reference import verified: 11-photo batch, sequential uploads, filename names, duplicate validation, failed-only retry, stable records and connection-change abort. No live uploads.');
+// Editing a saved reference replaces only its name, preserving media and identity.
+slots=[];deps=[];effects=[];cleanups.length=0;let clipboard='New character name',edited;
+const editorScope={exports:{},require:name=>name==='react'?react:name==='react/jsx-runtime'?{jsx,jsxs:jsx}:{},navigator:{clipboard:{readText:async()=>clipboard}}};
+vm.runInNewContext(ts.transpile(fs.readFileSync('src/ReferenceNameEditor.tsx','utf8'),{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}),editorScope);
+const character={id:'saved',base:'pod',name:'Old name',image:'refs/a.png',audio:'refs/a.wav',audioSeconds:4};
+const editorProps={character,characters:[character,{id:'other',base:'pod',name:'Taken'}],disabled:false,onSave:c=>edited=c};
+function editorRender(){cursor=0;tree=editorScope.exports.default(editorProps);effects.splice(0).forEach(fn=>fn());}
+editorRender();nodes().find(n=>n.type==='button').props.onClick();editorRender();
+await nodes().find(n=>n.type==='button'&&nodes(n).includes('Paste')).props.onClick();editorRender();
+assert.equal(nodes().find(n=>n.type==='input').props.value,'New character name','Paste replaces the complete old name');
+nodes().find(n=>n.type==='button'&&nodes(n).includes('Save name')).props.onClick();assert.deepEqual({...edited,name:character.name},character,'Save preserves existing id, photo and voice');
+editorRender();nodes().find(n=>n.type==='button').props.onClick();editorRender();clipboard='Taken';
+await nodes().find(n=>n.type==='button'&&nodes(n).includes('Paste')).props.onClick();editorRender();edited=undefined;
+nodes().find(n=>n.type==='button'&&nodes(n).includes('Save name')).props.onClick();editorRender();assert.equal(edited,undefined);assert.ok(nodes().some(n=>n.props?.role==='alert'));
+console.log('Reference name editing verified: whole-name Paste replacement, existing media/ID preservation and duplicate-name rejection.');
