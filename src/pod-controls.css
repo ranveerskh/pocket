@@ -11,5 +11,3 @@
 .runpod-switch-control input:focus-visible+.runpod-switch-track{outline:2px solid var(--accent);outline-offset:3px}.runpod-switch-control:has(input:disabled){cursor:default;opacity:.65}.runpod-switch-control input:disabled{cursor:default}
 
 .runpod-status>.status.wallet-low{border-color:#e05252;box-shadow:0 0 0 1px #e0525233;background:color-mix(in srgb,var(--panel) 90%,#e05252 10%)}.runpod-status>.status.wallet-low .dot{background:#ef4444;box-shadow:0 0 0 3px #ef444426}
-
-.runpod-quick-start{display:flex;align-items:center;gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.runpod-quick-start>.button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:40px;white-space:nowrap}.runpod-quick-start>small{font-size:12px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere;min-width:0}
