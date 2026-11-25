@@ -125,3 +125,13 @@ const quickPanel=panelScope.exports.default(quickProps),quickButton=nodes(quickP
 assert.equal(quickButton.props.disabled,false);assert.equal(quickButton.props.checked,false);quickButton.props.onChange({target:{checked:true}});assert.deepEqual(quickStarts,['start']);assert.ok(!nodes(quickPanel).some(n=>n.type==='select'),'Quick panel does not expose pod selection/settings');
 const runningPanel=panelScope.exports.default({...quickProps,service:{...quickProps.service,selectedPod:{...quickProps.service.selectedPod,status:'RUNNING',actions:['stop']}}});const powerSwitch=nodes(runningPanel).find(n=>n.props?.['aria-label']==='Pod power');assert.equal(powerSwitch.props.disabled,false);assert.equal(powerSwitch.props.checked,true);powerSwitch.props.onChange({target:{checked:false}});assert.deepEqual(quickStarts,['start','stop']);
 console.log('Pod power switch verified: OFF starts, ON stops, checked state follows pod status, no pod picker.');
+
+// Paused records must permit arming; unconfirmed mutations must not.
+const queueChanging=panelScope.exports.autoStopQueueBusy;
+for(const state of ['paused','done','failed','running','queued'])assert.equal(queueChanging(false,[{base:'pod-a',state}],'pod-a'),false,state+' must permit arming');
+for(const state of ['staging','submitting','submission_unknown','pausing','resuming'])assert.equal(queueChanging(false,[{base:'pod-a',state}],'pod-a'),true,state+' must protect queue changes');
+assert.equal(queueChanging(false,[{base:'other-pod',state:'submitting'}],'pod-a'),false);
+assert.equal(queueChanging(true,[],'pod-a'),true);
+const offPanel=panelScope.exports.default({...quickProps,service:{...quickProps.service,autoStop:null},queueBusy:queueChanging(false,[{base:'pod-a',state:'paused'}],'pod-a')});
+assert.equal(nodes(offPanel).find(n=>n.props?.['aria-label']==='Auto-stop pod after queue finishes').props.disabled,false,'Paused clips allow OFF to ON');
+console.log('Auto-stop ON switch verified with paused records; active submissions remain protected.');

@@ -2,6 +2,7 @@ import {useEffect,useRef} from 'react';
 import {ChevronRight,RefreshCw,X,Power,Link2,Check,Minus} from 'lucide-react';
 import type {usePodControls} from './PodControls';
 type Props={service:ReturnType<typeof usePodControls>;connected:boolean;checking:boolean;open:boolean;onOpen:(open:boolean)=>void;enabled:boolean;onToggle:()=>void;disabled:boolean;onSettings:()=>void;queueBusy:boolean};
+export function autoStopQueueBusy(changing:boolean,jobs:{base:string;state:string}[],base:string){return changing||jobs.some(job=>job.base===base&&['staging','submitting','submission_unknown','pausing','resuming'].includes(job.state));}
 export function walletHours(balance:number,rate:number){if(rate<=0||!Number.isFinite(rate)||!Number.isFinite(balance))return '';const minutes=Math.max(0,Math.floor(balance/rate*60));return Math.floor(minutes/60)+'h '+minutes%60+'m left';}
 export default function RunPodStatus(p:Props){
  const root=useRef<HTMLDivElement>(null),s=p.service;
@@ -25,6 +26,7 @@ export default function RunPodStatus(p:Props){
  {s.autoStop&&s.autoStop.state!=='off'&&<p className="runpod-watch-note" role="status">{s.autoStop.state==='stopping'?'Stopping pod · ':armed?'Auto-stop armed · ':''}{s.autoStop.message}</p>}
  {armed&&<small className="runpod-wallet-note">{s.autoStop?.checkedAt?'Last server check: '+new Date(s.autoStop.checkedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'Waiting for first server check…'}</small>}
  {p.queueBusy&&<small>Finish submitting or changing your queue before arming auto-stop.</small>}
+ {s.configured&&!s.selectedPod&&<small>Select your pod once in Settings to enable auto-stop.</small>}
  {s.error&&<p className="error" role="alert">{s.error}</p>}
  <div className="pod-power-actions"><button className="text-button" disabled={s.busy} onClick={()=>{void s.refresh();void s.refreshWallet();}}><RefreshCw size={14}/>Refresh</button><button className="text-button" onClick={()=>{p.onOpen(false);p.onSettings();}}>Settings & pod power<ChevronRight size={14}/></button></div>
  {!s.configured&&<small>Add your RunPod API key in Settings to enable balance and auto-stop.</small>}
