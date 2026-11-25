@@ -5,7 +5,7 @@ import {useEffect, useMemo, useRef, useState, type ReactNode} from 'react';
 import {ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Film, Clock3, Pause, Play, Plus, RotateCcw, Square, X} from 'lucide-react';
 import LocalMedia, {DeviceBadge} from './LocalMedia';
 import DownloadButton from './DownloadButton';
-import MediaPoster from './MediaPoster';
+import WatchedPreview from './WatchedPreview';
 import {creationLabel, creationTitle, galleryItems, type GallerySort} from './gallery-model';
 import {queueRemaining, queueClock, estimatedPercent, jobTiming, mergeTimingSamples, timeLabel, timingBucket, timingStats} from './timing';
 import {useTimingHistory} from './useTimingHistory';
@@ -256,7 +256,7 @@ export default function ProjectWorkspace(p: Props) {
             const ready = job.state === 'complete' && Boolean(job.files?.length);
             return <article className={"workspace-shot panel"+(selected===jobKey(job)?" is-playing":"")} aria-current={selected===jobKey(job)?true:undefined} id={'shot-' + jobKey(job)} key={jobKey(job)}>
               {ready && <button className="shot-preview-button" onClick={() => {setMobileComposer(false);setSelected(jobKey(job));}} aria-label={(isLocal?'Preview ':'Play ') + creationLabel(job)}>
-                <MediaPoster job={job}/><span className="shot-preview-label"><Play size={16}/> Preview</span>
+                <WatchedPreview job={job}/>
               </button>}
               <div className="workspace-shot-body">
                 {job.state==='running'?<button className="shot-timing-trigger" aria-label={'Generation timing for '+creationLabel(job)} onClick={()=>{setMobileComposer(false);setTimingSelection(jobKey(job));}}>
