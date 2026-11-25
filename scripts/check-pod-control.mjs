@@ -54,15 +54,46 @@ queue={queue_running:[],queue_pending:[]};history={'clip-a':done,'clip-b':failed
 await worker.checkWatch(wk,start+2000);assert.equal(watches.get(wk).data.state,'idle');
 await worker.checkWatch(wk,start+61000);assert.equal(stopCount(),beforeStop,'Wait for a second empty check at least 60 seconds later');
 await Promise.all([worker.checkWatch(wk,start+63000),worker.checkWatch(wk,start+63000)]);assert.equal(stopCount(),beforeStop+1,'Concurrent workers stop exactly once');assert.equal(watches.get(wk).data.state,'stopped');assert.equal(watches.get(wk).data.access,'');
-start=await arm();beforeStop=stopCount();queue={queue_running:[],queue_pending:[]};history={'clip-a':done};await worker.checkWatch(wk,start+1000);assert.equal(watches.get(wk).data.state,'attention');assert.equal(stopCount(),beforeStop,'Missing or paused queue entries never trigger auto-stop');
-start=await arm();queue={queue_running:[],queue_pending:[]};history={'clip-a':done,'clip-b':{status:{status_str:'error',messages:[['execution_interrupted',{}]]}}};await worker.checkWatch(wk,start+1000);assert.equal(watches.get(wk).data.state,'attention');assert.equal(stopCount(),beforeStop,'Interrupted pause is different from a failed render');
+// Empty live queue is authoritative, independent of output shape/history retention.
+for(const missing of [{}, {'clip-a':done}, {'clip-a':{status:{completed:true,status_str:'success'},outputs:{save:{videos:[{filename:'film.mp4'}]}}}}]){
+ start=await arm();beforeStop=stopCount();queue={queue_running:[],queue_pending:[]};history=missing;
+ await worker.checkWatch(wk,start+1000);assert.equal(watches.get(wk).data.state,'idle');
+ await worker.checkWatch(wk,start+62000);assert.equal(stopCount(),beforeStop+1,'Missing history or output type never blocks stopping an empty queue');
+}
+// Submission holds preserve ON across new batches and multiple devices.
+start=await arm();beforeStop=stopCount();
+const firstHold=await(await call('POST',{id:'abc123',action:'watch_hold'})).json();
+const secondHold=await(await call('POST',{id:'abc123',action:'watch_hold'})).json();
+assert.ok(firstHold.lease&&secondHold.lease);queue={queue_running:[],queue_pending:[]};
+await worker.checkWatch(wk,start+1000);await worker.checkWatch(wk,start+62000);assert.equal(stopCount(),beforeStop,'Submission gaps cannot stop the pod');
+await call('POST',{id:'abc123',action:'watch_release',lease:firstHold.lease,generation:firstHold.generation});
+await worker.checkWatch(wk,start+125000);assert.equal(stopCount(),beforeStop,'Another device still submitting keeps the hold');
+queue={queue_running:[],queue_pending:[[2,'new-shot']]};
+await call('POST',{id:'abc123',action:'watch_release',lease:secondHold.lease,generation:secondHold.generation});
+await worker.checkWatch(wk,start+126000);assert.ok(watches.get(wk).data.ids.includes('new-shot'));
+queue={queue_running:[],queue_pending:[]};await worker.checkWatch(wk,start+127000);await worker.checkWatch(wk,start+188000);assert.equal(stopCount(),beforeStop+1,'New shots finish under the same ON intent');
+// A closed browser cannot leave a permanent submission hold.
+start=await arm();beforeStop=stopCount();await call('POST',{id:'abc123',action:'watch_hold'});queue={queue_running:[],queue_pending:[]};
+await worker.checkWatch(wk,start+1801000);await worker.checkWatch(wk,start+1862000);assert.equal(stopCount(),beforeStop+1,'Expired submission hold resumes server-only auto-stop');
+// Pause/manual OFF wins over late release, even after a fresh arm.
+start=await arm();beforeStop=stopCount();const staleHold=await(await call('POST',{id:'abc123',action:'watch_hold'})).json();
+await call('POST',{id:'abc123',action:'watch_off'});
+await call('POST',{id:'abc123',action:'watch_release',lease:staleHold.lease,generation:staleHold.generation});
+assert.equal(watches.get(wk).data.state,'off');
+await arm();const newGeneration=watches.get(wk).data.generation;
+await call('POST',{id:'abc123',action:'watch_release',lease:staleHold.lease,generation:staleHold.generation});assert.equal(watches.get(wk).data.generation,newGeneration);
 start=await arm();queueOffline=true;await worker.checkWatch(wk,start+1000);assert.equal(watches.get(wk).data.state,'armed');assert.equal(stopCount(),beforeStop);queueOffline=false;
 await call('POST',{id:'abc123',action:'watch_off'});queue={queue_running:[],queue_pending:[]};history={'clip-a':done,'clip-b':done};await worker.checkWatch(wk,start+120000);assert.equal(stopCount(),beforeStop,'Disarmed watcher cannot stop a pod');
 start=await arm();queue={queue_running:[],queue_pending:[]};history={'clip-a':done,'clip-b':failed};await worker.checkWatch(wk,start+1000);queueReads=0;lateQueue=true;await worker.checkWatch(wk,start+62000);assert.equal(stopCount(),beforeStop,'Final queue recheck catches newly submitted work');assert.equal(watches.get(wk).data.state,'armed');lateQueue=false;
 start=await arm();queue={queue_running:[],queue_pending:[]};history={'clip-a':done,'clip-b':failed};await worker.checkWatch(wk,start+1000);loseStopResponse=true;await worker.checkWatch(wk,start+62000);loseStopResponse=false;assert.equal(watches.get(wk).data.state,'stopping');assert.equal(stopCount(),beforeStop+1);await worker.checkWatch(wk,start+183000);assert.equal(watches.get(wk).data.state,'stopped');assert.equal(stopCount(),beforeStop+1,'Lost stop reply recovers with a read rather than another stop');
+// Exercise the real client addition flow against the mocked server, not just DTOs.
+await arm();controls=render();const finishAddition=await controls.beginQueueAddition('https://abc123-8188.proxy.runpod.net');
+assert.equal(watches.get(wk).data.state,'armed');assert.equal(watches.get(wk).data.holds.length,1);
+await finishAddition();assert.equal(watches.get(wk).data.holds.length,0);assert.equal(watches.get(wk).data.state,'armed');
+await call('POST',{id:'abc123',action:'watch_off'});const finishOff=await controls.beginQueueAddition('https://abc123-8188.proxy.runpod.net');await finishOff();assert.equal(watches.get(wk).data.state,'off','Adding shots never enables auto-stop without prior user intent');
 start=await arm();const summary=await(await call('GET',null,access,'https://studio.test','?pod=abc123')).json();assert.equal(summary.watch.state,'armed');assert.ok(!JSON.stringify(summary).includes(access));await call('DELETE');assert.equal(watches.get(wk).data.state,'off');assert.equal(watches.get(wk).data.access,'');
 assert.equal((await call('POST',{id:'abc123',action:'watch_arm'})).status,401);
-console.log('Server auto-stop verified without a browser: success + failed shots, live queue, two idle checks, concurrent leases, pause/missing protection, offline retry, disarm, final recheck, lost-reply recovery, credential removal and private DTOs.');
+console.log('Server auto-stop verified without a browser: success + failed shots, live queue, two idle checks, concurrent leases, submission holds, new shots, missing history, explicit pause protection, offline retry, disarm, final recheck, lost-reply recovery, credential removal and private DTOs.');
 const jsx=(type,props)=>({type,props:props||{}});
 const panelScope={exports:{},require:name=>name==='react'?{useEffect:()=>{},useRef:()=>({current:null})}:name==='react/jsx-runtime'?{jsx,jsxs:jsx}:{},Date,Number,Math};
 vm.runInNewContext(ts.transpile(fs.readFileSync('src/RunPodStatus.tsx','utf8'),{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}),panelScope);

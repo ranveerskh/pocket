@@ -1,6 +1,6 @@
 import {getStore} from '@netlify/blobs';
 export const watchStore=()=>getStore({name:'pocket-pod-watch-v1',consistency:'strong'});
-export type PodWatch={owner:string;access:string;pod:string;port:number;generation:string;state:'armed'|'idle'|'stopping'|'stopped'|'attention'|'off';ids:string[];armedAt:number;checkedAt?:number;idleAt?:number;message?:string};
+export type PodWatch={owner:string;access:string;pod:string;port:number;generation:string;state:'armed'|'idle'|'stopping'|'stopped'|'attention'|'off';ids:string[];armedAt:number;checkedAt?:number;idleAt?:number;holds?:{id:string;until:number}[];message?:string};
 export const watchKey=(owner:string,pod:string)=>owner+'/'+pod;
 export function publicWatch(w:PodWatch|null){return w?{state:w.state,pod:w.pod,armedAt:w.armedAt,checkedAt:w.checkedAt,message:w.message||'',count:w.ids.length}:null;}
 export async function credentialId(access:string){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(access))),v=>v.toString(16).padStart(2,'0')).join('');}
@@ -22,16 +22,16 @@ export function queueIds(q:any):string[]{
  if(!Array.isArray(q?.queue_running)||!Array.isArray(q?.queue_pending))throw Error('Queue status unavailable.');
  return [...q.queue_running,...q.queue_pending].map((entry:any)=>{if(!Array.isArray(entry)||typeof entry[1]!=='string'||!/^[A-Za-z0-9-]{1,180}$/.test(entry[1]))throw Error('Invalid queue entry.');return entry[1];});
 }
-// Fail closed: an empty queue alone never authorizes a stop. Every captured
-// execution must be finished: successful with saved output, or failed.
-export function inspectWatch(w:PodWatch,q:any,history:any,now:number):PodWatch{
- const current=queueIds(q),ids=[...new Set([...w.ids,...current])];
- if(ids.length>1000)return{...w,state:'attention',checkedAt:now,message:'Too many tracked shots. Auto-stop disabled.'};
+// Stop intent follows the live queue, including failed/cancelled jobs and new shots.
+// Explicit app Pause disarms the watch before removing work from ComfyUI.
+export function inspectWatch(w:PodWatch,q:any,_history:any,now:number):PodWatch{
+ const current=queueIds(q),ids=[...new Set([...w.ids,...current])].slice(-1000);
+ const holds=(w.holds||[]).filter(hold=>hold.until>now);
  if(now-w.armedAt>172800000)return{...w,state:'attention',checkedAt:now,message:'Auto-stop expired after 48 hours. Arm it again.'};
- if(current.length)return{...w,ids,state:'armed',idleAt:undefined,checkedAt:now,message:'Waiting for queue to finish.'};
- const success=ids.length>0&&ids.every(id=>{const h=history?.[id];if(h?.status?.messages?.some((m:any)=>m?.[0]==='execution_interrupted'))return false;if(h?.status?.status_str==='error')return true;return h?.status?.completed===true&&h.status.status_str==='success'&&Object.values(h.outputs||{}).some((output:any)=>['images','gifs','videos','audio'].some(field=>Array.isArray(output?.[field])&&output[field].some((f:any)=>typeof f.filename==='string'&&f.filename.length>0&&f.type==='output')));});
- if(!success)return{...w,ids,state:'attention',checkedAt:now,message:'A shot is paused, missing or has no confirmed saved output. Pod kept running.'};
- return{...w,ids,state:'idle',idleAt:w.idleAt||now,checkedAt:now,message:'Queue complete. Confirming idle before stopping.'};
+ if(holds.length)return{...w,ids,holds,state:'armed',idleAt:undefined,checkedAt:now,message:'Auto-stop ON. Waiting for new shots to finish submitting.'};
+ if(current.length)return{...w,ids,holds,state:'armed',idleAt:undefined,checkedAt:now,message:'Waiting for queue to finish.'};
+ if(!ids.length)return{...w,state:'attention',checkedAt:now,message:'No queued work was captured. Arm auto-stop after queuing shots.'};
+ return{...w,ids,holds,state:'idle',idleAt:w.idleAt||now,checkedAt:now,message:'Queue empty. Confirming idle before stopping; failed shots do not block auto-stop.'};
 }
 export async function checkWatch(key:string,now=Date.now()){
  const store=watchStore(),record=await store.getWithMetadata(key,{type:'json'});if(!record)return;
@@ -47,8 +47,8 @@ export async function checkWatch(key:string,now=Date.now()){
    await store.setJSON(key,{...w,state:'armed',idleAt:undefined,checkedAt:now,message:'Rechecking queue before retrying an unconfirmed stop.'},{onlyIfMatch:record.etag});return;
   }
 
-  const [q,history]=await Promise.all([comfyRead(w.pod,w.port,'/queue'),comfyRead(w.pod,w.port,'/history?max_items=1000')]);
-  const next=inspectWatch(w,q,history,now);
+  const q=await comfyRead(w.pod,w.port,'/queue');
+  const next=inspectWatch(w,q,null,now);
   if(next.state!=='idle'||!w.idleAt||now-w.idleAt<60000){await store.setJSON(key,next.state==='attention'?{...next,access:''}:next,{onlyIfMatch:record.etag});return;}
   // A lease prevents another worker or UI re-arm from racing this stop decision.
   const claim={...next,state:'stopping' as const,message:'Stopping pod after completed queue.'};

@@ -44,6 +44,30 @@ export default async function control(req:Request){
  const podId=req.method==='GET'?new URL(req.url).searchParams.get('pod'):body.id;
  if(req.method==='GET'&&validId(podId)){const pod=safePod(await api('/pods/'+encodeURIComponent(podId)));return json({configured:true,pod,watch:publicWatch(await watchStore().get(watchKey(id,podId),{type:'json'}) as PodWatch|null)});}
  if(req.method==='GET')return podId?(validId(podId)?json({configured:true,pod:safePod(await api('/pods/'+encodeURIComponent(podId)))}):json({error:'Invalid pod.'},400)):json({configured:true,pods:await list()});
+ // A bounded submission lease keeps auto-stop ON across additions without
+ // allowing an empty gap between bulk requests to trigger a power action.
+ if(validId(podId)&&['watch_hold','watch_release'].includes(body.action)){
+  const ws=watchStore(),wk=watchKey(id,podId);
+  for(let attempt=0;attempt<3;attempt++){
+   const previous=await ws.getWithMetadata(wk,{type:'json'}),w=previous?.data as PodWatch|undefined;
+   if(w?.state==='stopping')return json({error:'Pod is stopping. Wait before adding shots.'},409);
+   if(!w||!['armed','idle'].includes(w.state))return json({watch:publicWatch(w||null),lease:null});
+   const now=Date.now(),holds=(w.holds||[]).filter(hold=>hold.until>now);
+   let lease:string|null=null;
+   if(body.action==='watch_hold'){
+    if(holds.length>=20)return json({error:'Too many simultaneous queue submissions. Try again shortly.'},409);
+    lease=crypto.randomUUID();holds.push({id:lease,until:now+30*60_000});
+   }else{
+    // A release from before a manual OFF/re-arm cannot alter the new watch.
+    if(body.generation!==w.generation||typeof body.lease!=='string')return json({watch:publicWatch(w),lease:null});
+    const index=holds.findIndex(hold=>hold.id===body.lease);if(index>=0)holds.splice(index,1);
+   }
+   const next:PodWatch={...w,holds,state:'armed',idleAt:undefined,checkedAt:now,message:holds.length?'Auto-stop ON. Adding shots.':'Auto-stop ON. Waiting for queue to finish.'};
+   const result=await ws.setJSON(wk,next,{onlyIfMatch:previous!.etag});
+   if(result.modified)return json({watch:publicWatch(next),lease,generation:lease?w.generation:undefined});
+  }
+  return json({error:'Queue submissions changed on another device. Try again.'},409);
+ }
  if(validId(podId)&&['watch_arm','watch_off'].includes(body.action)){
   const ws=watchStore(),wk=watchKey(id,podId),previous=await ws.getWithMetadata(wk,{type:'json'});
   if(previous?.data.state==='stopping')return json({error:'Auto-stop is already stopping this pod. Wait for status before submitting more work.'},409);
@@ -52,7 +76,7 @@ export default async function control(req:Request){
   if(body.action==='watch_arm'){
    const pod=await api('/pods/'+podId);if(pod.status!=='RUNNING'||!pod.actions?.includes('stop'))return json({error:'Start the pod and queue your shots before arming auto-stop.'},409);
    const ids=queueIds(await comfyRead(podId,port,'/queue'));if(!ids.length||ids.length>1000)return json({error:'Queue 1–1000 shots first, then enable auto-stop.'},409);
-   w={owner:id,access:token,pod:podId,port,generation:crypto.randomUUID(),state:'armed',ids,armedAt:Date.now(),message:'Auto-stop armed. Failed shots count as finished; paused or missing shots do not.'};
+   w={owner:id,access:token,pod:podId,port,generation:crypto.randomUUID(),state:'armed',ids,armedAt:Date.now(),message:'Auto-stop armed. Stops after the live queue empties, including failed shots. Adding shots keeps auto-stop ON; Pause turns it OFF.'};
   }else w={owner:id,access:'',pod:podId,port,generation:crypto.randomUUID(),state:'off',ids:[],armedAt:Date.now(),message:'Auto-stop off.'};
   const result=await ws.setJSON(wk,w,previous?{onlyIfMatch:previous.etag}:{onlyIfNew:true});if(!result.modified)return json({error:'Auto-stop changed on another device. Refresh and retry.'},409);
   return json({watch:publicWatch(w)});
