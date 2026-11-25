@@ -76,7 +76,7 @@ export default async function control(req:Request){
   if(body.action==='watch_arm'){
    const pod=await api('/pods/'+podId);if(pod.status!=='RUNNING'||!pod.actions?.includes('stop'))return json({error:'Start the pod and queue your shots before arming auto-stop.'},409);
    const ids=queueIds(await comfyRead(podId,port,'/queue'));if(!ids.length||ids.length>1000)return json({error:'Queue 1–1000 shots first, then enable auto-stop.'},409);
-   w={owner:id,access:token,pod:podId,port,generation:crypto.randomUUID(),state:'armed',ids,armedAt:Date.now(),message:'Auto-stop armed. Stops after the live queue empties, including failed shots. Adding shots keeps auto-stop ON; Pause turns it OFF.'};
+   w={owner:id,access:token,pod:podId,port,generation:crypto.randomUUID(),state:'armed',ids,armedAt:Date.now(),message:'Auto-stop armed. Stops after the live queue empties, including failed shots. Adding or pausing shots keeps auto-stop ON; paused shots stay saved.'};
   }else w={owner:id,access:'',pod:podId,port,generation:crypto.randomUUID(),state:'off',ids:[],armedAt:Date.now(),message:'Auto-stop off.'};
   const result=await ws.setJSON(wk,w,previous?{onlyIfMatch:previous.etag}:{onlyIfNew:true});if(!result.modified)return json({error:'Auto-stop changed on another device. Refresh and retry.'},409);
   return json({watch:publicWatch(w)});

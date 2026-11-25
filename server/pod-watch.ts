@@ -23,7 +23,7 @@ export function queueIds(q:any):string[]{
  return [...q.queue_running,...q.queue_pending].map((entry:any)=>{if(!Array.isArray(entry)||typeof entry[1]!=='string'||!/^[A-Za-z0-9-]{1,180}$/.test(entry[1]))throw Error('Invalid queue entry.');return entry[1];});
 }
 // Stop intent follows the live queue, including failed/cancelled jobs and new shots.
-// Explicit app Pause disarms the watch before removing work from ComfyUI.
+// Paused work stays saved in the app; an empty live queue still permits a stop.
 export function inspectWatch(w:PodWatch,q:any,_history:any,now:number):PodWatch{
  const current=queueIds(q),ids=[...new Set([...w.ids,...current])].slice(-1000);
  const holds=(w.holds||[]).filter(hold=>hold.until>now);
